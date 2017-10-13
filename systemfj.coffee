@@ -35,8 +35,6 @@ class Constructor
   new: (vals) ->
 
 class Type
-  @allTypes: {}
-
   # create a new type with name and type variables (no regular vars as no dependent types yet)
   # e.g. Maybe = new Type "Maybe a"
   constructor: (type, constructors...)->
@@ -45,7 +43,7 @@ class Type
     # creating TypeVars for each var name in the constructor
     @vars = (new TypeVar xs[i], -1 for i in [1...xs.length])
     @add cons for cons in constructors # adding constructors
-    Type.allTypes[@name] = this # adding this type to the list of all types
+    Type[@name] = this # adding this type to the list of all types
 
   # adding a new constructor to this type in the same format as Type constructor,
   # e.g. "Just a" or "MyPair Int Float"
@@ -62,10 +60,40 @@ class Type
       if v isnt -1 # found a variable, need to bind
         # tricky: creating a Var of type TypeVar that is bound to an index found
         vars.push new Var (i-1).toString(), -1, new TypeVar xs[i], v
-      else # not found, need to look for a type with this name - TBD
-        console.log "not found"
+      else
+        if xs[i] is @name # recursive type
+          vars.push new Var (i-1).toString(), -1, this # since this is recursive type, just giving our var a reference to this
+        else # final option: need to look in existing types
+          t = Type[xs[i]]
+          # adding concrete type instead of a variable. No checking for it being a concrete type etc, very rudimentary
+          if t?
+            vars.push new Var (i-1).toString(), -1, t
+          else # error, nothing is found. TODO: handle error more gracefully
+            throw ("Type " + xs[i] + " not found!")
+
     cons = new Constructor name, vars
     @[cons.name] = cons
+
+# some built in types
+tTOP = new Type "_TOP_" # top type of all types - for the future subtyping?
+tBOTTOM = new Type "_BOTTOM_" # _|_ in Haskell
+tEmpty = new Type "_EMPTY_" # () in Haskell
+tUnit = new Type "_UNIT_", "Unit" # type with a single element
+
+# primitive types (substituted into js types directly)
+tInt = new Type "Int", "I#"
+tFloat = new Type "Float", "F#"
+tString = new Type "String", "S#"
+
+# some standard types
+tPair = new Type "Pair a b", "Pair a b"
+tEither = new Type "Either a b", "Left a", "Right b"
+tMaybe = new Type "Maybe a", "Just a", "Nothing"
+tList = new Type "List a", "Cell a List", "Nil"
+
+tPeano = new Type "Nat", "Z", "S Nat"
+
+T = Type # alias for global types, so that we can write things like T.Int
 
 # our functional function with pattern matching and type checking and polymorphism
 class Function
@@ -81,14 +109,18 @@ class Function
 
 
 # Some tests #################################################
-Maybe = new Type "Maybe a", "Just a", "Nothing"
+
 #Maybe.add "Nothing"
 #Maybe.add "Just a"
-# Maybe.add "Crazy Int"
+#tMaybe.add "Crazy Int"
+#tMaybe.add "MoreCrazy Afasf"
+tCustom = new Type "Custom", "Cons Int"
 
 length = new Function "length"
 length.match "Nil", -> 0
 length.match "Cell", (x) -> 1 + length.ap (tail x)
 
-console.dir length
-console.dir Maybe, {depth: 4, colors: true}
+#console.dir length
+#console.dir Maybe, {depth: 4, colors: true}
+#console.dir List, {depth: 4, colors: true}
+console.dir Type, {depth: 5, colors: true}
