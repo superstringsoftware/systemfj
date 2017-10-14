@@ -37,13 +37,15 @@ class Value
     for v in keys
       if (@[v] instanceof Value)
         ret = ret + " " + (@[v].show false)
-      else ret = ret + " " + @[v].toString()
+      else
+        ret += if (typeof @[v] is "string") then " '" + @[v] + "'" else " " + @[v].toString()
     ret = if (keys.length > 0) and (not top_level) then ret + ")" else ret
     ret = ret + " :: " + @_type_.name if top_level
     ret
 
 # class generating Product Type values (records)
 # Should NOT be available to constuct publicly, only from inside of Type
+# now can only generate Tuples (unnamed records)
 class Constructor
   constructor: (@name, @type, vars) ->
     @vars = []
@@ -71,7 +73,7 @@ class Constructor
         #console.dir vals[i]
         v = vals[i] # is there a value number i?
         if v?
-          if @vars[i].type.equals Type.checkType v # are the types ok?
+          if @vars[i].type.equals Type.checkType v # are the types ok? doesnt work for polymorphic yet!!!
             val[@vars[i].name] = v
           else throw "Type mismatch in assignment!"
       val
@@ -127,7 +129,7 @@ class Type
 
     cons = new Constructor name, this, vars
     @constructors[cons.name] = cons # adding constructor to the list of constructors
-    @[cons.name] = cons.new # adding "new" generating function as a constructor name - for cleaner syntax!
+    @[cons.name] = cons.new # adding "new" generating function as a constructor name - for cleaner syntax! (Nat.Z is a function call instead of Nat.Z.new)
     #@[cons.name].bind cons # binding this to newly created constructor
 
   # helper function that returns name of the type *even if v is not Value* but a primitive type
@@ -163,37 +165,53 @@ class Type
     ret
 
 # some built in types
-tTOP = new Type "_TOP_" # top type of all types - for the future subtyping?
-tBOTTOM = new Type "_BOTTOM_" # _|_ in Haskell
-tEmpty = new Type "_EMPTY_" # () in Haskell
-tUnit = new Type "_UNIT_", "Unit" # type with a single element
+TOP = new Type "_TOP_" # top type of all types - for the future subtyping?
+BOTTOM = new Type "_BOTTOM_" # _|_ in Haskell
+EMPTY = new Type "_EMPTY_" # () in Haskell
+UNIT = new Type "_UNIT_", "Unit" # type with a single element
+# exposing constructors for cleaner syntax
+Unit = UNIT.Unit
+
+#console.log Unit().show()
 
 # primitive types (substituted into js types directly)
-tInt = new Type "Int", "I#"
-tFloat = new Type "Float", "F#"
-tString = new Type "String", "S#"
+JInt = new Type "Int", "I#"
+JFloat = new Type "Float", "F#"
+JString = new Type "String", "S#"
 
-# some standard types
-tPair = new Type "Pair a b", "Pair a b"
-tEither = new Type "Either a b", "Left a", "Right b"
-tMaybe = new Type "Maybe a", "Just a", "Nothing"
-tList = new Type "List a", "Cell a List", "Nil"
+# some standard types - exposing constructors right away
+# THIS SHOULD GO TO Type creation function - just add the names to Exports!!!
+Pair = (new Type "Pair a b", "Pair a b").Pair
+#p = Pair 1, 2
+Left = (new Type "Either a b", "Left a", "Right b").Left
+Right = Type.Either.Right
+Just = (new Type "Maybe a", "Just a", "Nothing").Just
+Nothing = Type.Maybe.Nothing
+Cell = (new Type "List a", "Cell a List", "Nil").Cell
+Nil = Type.List.Nil
 
-tPeano = new Type "Nat", "Z", "S Nat"
+Z = (new Type "Nat", "Z", "S Nat").Z
+S = Type.Nat.S
 
 T = Type # alias for global types, so that we can write things like T.Int
 
 # our functional function with pattern matching and type checking and polymorphism
 class Func
-  constructor: (@name) ->
+  constructor: (@name, @arity) ->
     @functions = {}
 
-  match: (consTag, func) ->
+  match: (consTag, func) =>
     @functions[consTag] = func
 
   # function application - think through
-  ap: (vals) ->
-
+  # now only works with 1 argument - think about lambda for many argument functions???
+  ap: (vals...) =>
+    v = vals[0]
+    if not (v instanceof Value)
+      throw ("Type error while calling " + @name)
+    # pattern matching first
+    fn = x for x of @functions when x is v._constructorTag_
+    @functions[fn] v # calling matched function with the argument
 
 
 # Some tests #################################################
@@ -204,24 +222,31 @@ class Func
 #tMaybe.add "MoreCrazy Afasf"
 tCustom = new Type "Custom", "Cons Float String"
 
+console.log t for t in Type.showAllTypes()
+
 length = new Func "length"
 length.match "Nil", -> 0
 length.match "Cell", (x) -> 1 + length.ap (tail x)
 
-#console.dir length
+f1 = new Func "toInt", 1
+f1.match "Z", -> 0
+f1.match "S", (x) -> 1 + f1.ap x['0'] # this pattern matching works for 0th element of S constructor - how do we make it a better syntax???
+toInt = f1.ap
+
+#console.dir toInt
 #console.dir Maybe, {depth: 4, colors: true}
 #console.dir List, {depth: 4, colors: true}
 #console.dir Type, {depth: 6, colors: true}
 
-z = T.Nat.Z()
-two = T.Nat.S T.Nat.S T.Nat.S T.Nat.Z()
-console.log z.show()
+two = S S S S Z()
+console.log Z().show()
 console.log two.show()
+y0 = toInt Z()
+y1 = toInt two
+console.log y0, y1
 
 t1 = T.Custom.Cons 2, "Hello"
 console.log t1.show()
 
 #console.log T.List.constructors.Cell.show()
 #console.log T.List.show()
-
-console.log t for t in Type.showAllTypes()
