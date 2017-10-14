@@ -10,6 +10,7 @@ class TypeVar extends Variable
   constructor: (name, boundTo)-> super name, boundTo
   kind: -> # should return Kind of a type variable's current value
   bind: (val) -> throw "TypeVar::bind() not implemented yet"
+  show: => @name + " :: " + "Type"
 
 # used for regular variables
 class Var extends Variable
@@ -18,11 +19,32 @@ class Var extends Variable
     @type = type
   type: -> @type # should return Type that our variable indexes - can be either TypeVar OR specific type
   bind: (val) -> throw "Var::bind() not implemented yet"
+  show: => @name + " :: " + @type.name
+
+# class for holding values - basically, a record. Do we even need a class here?
+class Value
+  # pass in constructorTag and reference to type, add value fields as needed
+  # for now passing reference to Type, ideally need to do all type checking via
+  # constructorTags only for efficiency
+  constructor: (@_constructorTag_, @_type_) ->
+  # pretty printing values
+  show: (top_level = true)=>
+    keys = (v for v in Object.keys(@) when v not in ["show", "_constructorTag_", "_type_"])
+    ret = if (keys.length > 0) and (not top_level) then "(" + @_constructorTag_ else @_constructorTag_  #+ " :: " + @_type_.name
+    #console.log "Properties: --------------------------"
+    #console.dir keys
+    for v in keys
+      if (@[v] instanceof Value)
+        ret = ret + " " + (@[v].show false)
+      else ret = ret + " " + @[v].toString()
+    ret = if (keys.length > 0) and (not top_level) then ret + ")" else ret
+    ret = ret + " :: " + @_type_.name if top_level
+    ret
 
 # class generating Product Type values (records)
 # Should NOT be available to constuct publicly, only from inside of Type
 class Constructor
-  constructor: (@name, vars) ->
+  constructor: (@name, @type, vars) ->
     @vars = []
     @vars = vars if vars?
 
@@ -32,12 +54,34 @@ class Constructor
   _instantiateType: (n, type) ->
 
   # creates new value of the current type, typechecks etc
-  new: (vals) ->
+  # this is the main function to construct values
+  # now very inefficient
+  # bound since we are doing some fancy assignments for better syntax
+  new: (vals...) =>
+    #console.log "Calling new!"
+    #console.dir vals
+    if @vars.length is 0
+      new Value @name, @type # empty constructor is easy
+    else
+      #console.log "Compound constructor"
+      val = new Value @name, @type
+      for i in [0...@vars.length]
+        #console.log "Processing " + @vars[i].show()
+        #console.dir vals[i]
+        v = vals[i] # is there a value number i?
+        if v?
+          if @vars[i].type.equals v._type_ # are the types ok?
+            val[@vars[i].name] = v
+          else throw "Type mismatch in assignment!"
+      val
 
+# Class that contains all types in the system and at the same time serves as a SumType
+# of Constructors (which are Product types)
 class Type
   # create a new type with name and type variables (no regular vars as no dependent types yet)
   # e.g. Maybe = new Type "Maybe a"
   constructor: (type, constructors...)->
+    @constructors = {}
     xs = type.split(' ');
     @name = xs[0]
     # creating TypeVars for each var name in the constructor
@@ -45,9 +89,12 @@ class Type
     @add cons for cons in constructors # adding constructors
     Type[@name] = this # adding this type to the list of all types
 
+  # comparing 2 types, for now very basic (simply name)
+  equals: (type)=> @name is type.name
+
   # adding a new constructor to this type in the same format as Type constructor,
   # e.g. "Just a" or "MyPair Int Float"
-  add: (cons) ->
+  add: (cons) =>
     xs = cons.split(' ');
     name = xs[0];
     # for the remainder of the cons string things are a bit tricky:
@@ -71,8 +118,10 @@ class Type
           else # error, nothing is found. TODO: handle error more gracefully
             throw ("Type " + xs[i] + " not found!")
 
-    cons = new Constructor name, vars
-    @[cons.name] = cons
+    cons = new Constructor name, this, vars
+    @constructors[cons.name] = cons # adding constructor to the list of constructors
+    @[cons.name] = cons.new # adding "new" generating function as a constructor name - for cleaner syntax!
+    #@[cons.name].bind cons # binding this to newly created constructor
 
 # some built in types
 tTOP = new Type "_TOP_" # top type of all types - for the future subtyping?
@@ -96,7 +145,7 @@ tPeano = new Type "Nat", "Z", "S Nat"
 T = Type # alias for global types, so that we can write things like T.Int
 
 # our functional function with pattern matching and type checking and polymorphism
-class Function
+class Func
   constructor: (@name) ->
     @functions = {}
 
@@ -116,7 +165,7 @@ class Function
 #tMaybe.add "MoreCrazy Afasf"
 tCustom = new Type "Custom", "Cons Int"
 
-length = new Function "length"
+length = new Func "length"
 length.match "Nil", -> 0
 length.match "Cell", (x) -> 1 + length.ap (tail x)
 
@@ -124,3 +173,8 @@ length.match "Cell", (x) -> 1 + length.ap (tail x)
 #console.dir Maybe, {depth: 4, colors: true}
 #console.dir List, {depth: 4, colors: true}
 console.dir Type, {depth: 5, colors: true}
+
+z = T.Nat.Z()
+two = T.Nat.S T.Nat.S T.Nat.S T.Nat.Z()
+console.log z.show()
+console.log two.show()
