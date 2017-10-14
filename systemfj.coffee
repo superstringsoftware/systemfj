@@ -70,10 +70,11 @@ class Constructor
         #console.dir vals[i]
         v = vals[i] # is there a value number i?
         if v?
-          if @vars[i].type.equals v._type_ # are the types ok?
+          if @vars[i].type.equals Type.checkType v # are the types ok?
             val[@vars[i].name] = v
           else throw "Type mismatch in assignment!"
       val
+
 
 # Class that contains all types in the system and at the same time serves as a SumType
 # of Constructors (which are Product types)
@@ -123,6 +124,17 @@ class Type
     @[cons.name] = cons.new # adding "new" generating function as a constructor name - for cleaner syntax!
     #@[cons.name].bind cons # binding this to newly created constructor
 
+  # helper function that returns name of the type *even if v is not Value* but a primitive type
+  @checkType: (v) ->
+    if (v instanceof Value)
+      v._type_
+    else
+      switch (typeof v)
+        when "string" then Type.String
+        when "number" then Type.Float
+        else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
+
+
 # some built in types
 tTOP = new Type "_TOP_" # top type of all types - for the future subtyping?
 tBOTTOM = new Type "_BOTTOM_" # _|_ in Haskell
@@ -163,7 +175,7 @@ class Func
 #Maybe.add "Just a"
 #tMaybe.add "Crazy Int"
 #tMaybe.add "MoreCrazy Afasf"
-tCustom = new Type "Custom", "Cons Int"
+tCustom = new Type "Custom", "Cons Float String"
 
 length = new Func "length"
 length.match "Nil", -> 0
@@ -178,3 +190,6 @@ z = T.Nat.Z()
 two = T.Nat.S T.Nat.S T.Nat.S T.Nat.Z()
 console.log z.show()
 console.log two.show()
+
+t1 = T.Custom.Cons 2, "Hello"
+console.log t1.show()
