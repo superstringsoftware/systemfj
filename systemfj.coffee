@@ -11,6 +11,7 @@ class TypeVar extends Variable
   kind: -> # should return Kind of a type variable's current value
   bind: (val) -> throw "TypeVar::bind() not implemented yet"
   show: => @name + " :: " + "Type"
+  shortShow: => @name
 
 # used for regular variables
 class Var extends Variable
@@ -75,6 +76,11 @@ class Constructor
           else throw "Type mismatch in assignment!"
       val
 
+  show: =>
+    ret = @name
+    for v in @vars
+      ret = ret + " " + v.type.shortShow true
+    ret
 
 # Class that contains all types in the system and at the same time serves as a SumType
 # of Constructors (which are Product types)
@@ -134,6 +140,27 @@ class Type
         when "number" then Type.Float
         else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
 
+  shortShow: (inside = false)=>
+    ret = if (@vars.length > 0) and inside then "(" + @name else @name
+    for v in @vars
+      ret = ret + " " + v.name
+    ret = if (@vars.length > 0) and inside then ret + ")" else ret
+    ret
+
+  show: =>
+    ret = "type " + @shortShow()
+    cs = Object.keys @constructors
+    if cs.length > 0
+      ret += " = " + @constructors[cs[0]].show()
+      ret += " | " + @constructors[cs[i]].show() for i in [1...cs.length]
+    ret
+
+  # returns array of all types pretty printed as Strings
+  @showAllTypes: =>
+    ret = []
+    for t of Type
+      ret.push Type[t].show() if Type[t] instanceof Type
+    ret
 
 # some built in types
 tTOP = new Type "_TOP_" # top type of all types - for the future subtyping?
@@ -184,7 +211,7 @@ length.match "Cell", (x) -> 1 + length.ap (tail x)
 #console.dir length
 #console.dir Maybe, {depth: 4, colors: true}
 #console.dir List, {depth: 4, colors: true}
-console.dir Type, {depth: 5, colors: true}
+#console.dir Type, {depth: 6, colors: true}
 
 z = T.Nat.Z()
 two = T.Nat.S T.Nat.S T.Nat.S T.Nat.Z()
@@ -193,3 +220,8 @@ console.log two.show()
 
 t1 = T.Custom.Cons 2, "Hello"
 console.log t1.show()
+
+#console.log T.List.constructors.Cell.show()
+#console.log T.List.show()
+
+console.log t for t in Type.showAllTypes()
