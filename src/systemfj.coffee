@@ -82,31 +82,36 @@ export class Constructor
 
   Alternative approach: maybe more lightweight, use generic constructor function, but use some sort of specific type annotations.
   ###
+
+  # For tuples, we are using a convention:
+  # [val1, val2, ..., constructorTag, typeTag]
+  # Eventually for optimizations can encode it into bytes, for now --
+  # so, Nil :: List a will be ["Nil", "List a"]
+  # Just 4 :: Maybe Int --> [4, "Just", "Maybe Int"] etc
+  # this way, coffee destructuring assignment works quite nicely
   new: (vals...) =>
     #console.log "Calling new!"
     #console.dir vals
-    if @vars.length is 0
-      new Value @name, @type # empty constructor is easy
-    else
-      #console.log "Compound constructor"
-      val = new Value @name, @type
-      for i in [0...@vars.length]
-        #console.log "Processing " + @vars[i].show()
-        #console.dir vals[i]
-        v = vals[i] # is there a value number i?
-        if v?
-          t = @vars[i].type # t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
-          if (t instanceof TypeVar)
-            console.log "new Value creation - Partially implemented"
-            # 1. need to check type constrains (type classes etc), now NOT implemented
-            # 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
-            # 3. set the value to value
-            val[@vars[i].name] = v
-          else
-            if t.equals Type.checkType v # are the types ok? doesnt work for polymorphic yet!!!
-              val[@vars[i].name] = v
-            else throw "Type mismatch in assignment!"
-      val
+    val = [] #new Value @name, @type
+    for i in [0...@vars.length]
+      #console.log "Processing " + @vars[i].show()
+      #console.dir vals[i]
+      v = vals[i] # is there a value number i?
+      if v?
+        t = @vars[i].type # t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
+        if (t instanceof TypeVar)
+          console.log "new Value creation - Partially implemented"
+          # 1. need to check type constrains (type classes etc), now NOT implemented
+          # 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
+          # 3. set the value to value
+          val.push v
+        else
+          if t.equals Type.checkType v # are the types ok? doesnt work for polymorphic yet!!!
+            val.push v
+          else throw "Type mismatch in assignment!"
+    val.push @name
+    val.push @type
+    val
 
   # this function creates a Value, but it's useful for records
   # for tuples, see "new"
@@ -191,26 +196,37 @@ export class Type
     #export cons.new as cons.name
     #@[cons.name].bind cons # binding this to newly created constructor
 
+  # checking if v is a tuple - for now, checking type of last element in the array (which is Type now),
+  # but will need optimized away
+  @isTuple: (v)->
+    (v instanceof Array) and (v[v.length-1] instanceof Type)
+
   # helper function that returns name of the type *even if v is not Value* but a primitive type
   @checkType: (v) ->
     if (v instanceof Value)
       v._type_
     else
-      switch (typeof v)
-        when "string" then Type.String
-        when "number" then Type.Float
-        when "boolean" then Type.Bool
-        else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
+      if Type.isTuple v # checking if it's a tuple
+        v[v.length-1]
+      else
+        switch (typeof v)
+          when "string" then Type.String
+          when "number" then Type.Float
+          when "boolean" then Type.Bool
+          else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
 
   @checkConstructor: (v) ->
     if (v instanceof Value)
       v._constructorTag_
     else
-      switch (typeof v)
-        when "string" then "String"
-        when "number" then "Float"
-        when "boolean" then "Bool"
-        else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
+      if Type.isTuple v # checking if it's a tuple
+        v[v.length-2]
+      else
+        switch (typeof v)
+          when "string" then "String"
+          when "number" then "Float"
+          when "boolean" then "Bool"
+          else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
 
   shortShow: (inside = false)=>
     ret = if (@vars.length > 0) and inside then "(" + @name else @name
@@ -234,7 +250,30 @@ export class Type
       ret.push Type[t].show() if Type[t] instanceof Type
     ret
 
-# some built in types
+###
+HELPER FUNCTIONS --------------------------------------------------------------
+###
+
+# show - only Tuple for now
+show = (val, top_level = true)=>
+  #keys = (v for v in Object.keys(@) when v not in ["show", "_constructorTag_", "_type_"])
+  _constructorTag_ = val[val.length-2]
+  ret = if (val.length > 2) and (not top_level) then "(" + _constructorTag_ else _constructorTag_  #+ " :: " + @_type_.name
+  #console.log "Properties: --------------------------"
+  #console.dir keys
+  for i in [0...val.length-2]
+    if Type.isTuple val[i]
+      ret = ret + " " + show val[i], false
+    else
+      ret += if (typeof val[i] is "string") then " '" + val[i] + "'" else " " + val[i].toString()
+  ret = if (val.length > 2) and (not top_level) then ret + ")" else ret
+  ret = ret + " :: " + val[val.length-1].name if top_level
+  ret
+
+
+###
+# some built in types --------------------------------------------------------------
+###
 TOP = new Type "_TOP_" # top type of all types - for the future subtyping?
 BOTTOM = new Type "_BOTTOM_" # _|_ in Haskell
 EMPTY = new Type "_EMPTY_" # () in Haskell
@@ -306,7 +345,7 @@ isZero = fisZero.ap
 
 f1 = new Func "toInt", Type.Nat, Type.Int
 f1.match "Z", -> 0
-f1.match "S", (x) -> 1 + f1.ap x['0'] # this pattern matching works for 0th element of S constructor - how do we make it a better syntax???
+f1.match "S", ([x]) -> 1 + f1.ap x
 toInt = f1.ap
 
 # the below works, so we *can* pattern match quite nicely
@@ -324,8 +363,8 @@ tta = ([x, y]) ->
 # different test runs
 runTests = ->
   two = S S S S Z()
-  console.log Z().show()
-  console.log two.show()
+  console.log show Z() #.show()
+  console.log show two #.show()
   y0 = toInt Z()
   y1 = toInt two
   console.log y0, y1
@@ -336,14 +375,10 @@ runTests = ->
   j1 = Just 2
   j2 = Just "Hello"
   j3 = Just two
-  console.log j1.show()
-  console.log j2.show()
-  console.log j3.show()
+  console.log show j1
+  console.log show j2
+  console.log show j3
 
-  ttfa = {x: 1, y:"hello"}
-  ttf ttfa
-
-  tta [10, two]
 
 
 

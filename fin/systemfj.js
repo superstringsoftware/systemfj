@@ -35,6 +35,7 @@ var BOTTOM,
     fisZero,
     isZero,
     runTests,
+    _show,
     toInt,
     tta,
     ttf,
@@ -148,12 +149,12 @@ var Value = exports.Value = function () {
   // pass in constructorTag and reference to type, add value fields as needed
   // for now passing reference to Type, ideally need to do all type checking via
   // constructorTags only for efficiency
-  function Value(_constructorTag_, _type_) {
+  function Value(_constructorTag_1, _type_) {
     _classCallCheck(this, Value);
 
     // pretty printing values
     this.show = this.show.bind(this);
-    this._constructorTag_ = _constructorTag_;
+    this._constructorTag_ = _constructorTag_1;
     this._type_ = _type_;
   }
 
@@ -222,6 +223,12 @@ var Constructor = exports.Constructor = function () {
     Maybe Int, Maybe Float, Maybe String etc - but only if the values of this specific types are used.
      Alternative approach: maybe more lightweight, use generic constructor function, but use some sort of specific type annotations.
     */
+    // For tuples, we are using a convention:
+    // [val1, val2, ..., constructorTag, typeTag]
+    // Eventually for optimizations can encode it into bytes, for now --
+    // so, Nil :: List a will be ["Nil", "List a"]
+    // Just 4 :: Maybe Int --> [4, "Just", "Maybe Int"] etc
+    // this way, coffee destructuring assignment works quite nicely
     this.new = this.new.bind(this);
     // this function creates a Value, but it's useful for records
     // for tuples, see "new"
@@ -253,40 +260,37 @@ var Constructor = exports.Constructor = function () {
       var i, j, ref, t, v, val;
       //console.log "Calling new!"
       //console.dir vals
-      if (this.vars.length === 0) {
-        return new Value(this.name, this.type); // empty constructor is easy
-      } else {
-        //console.log "Compound constructor"
-        val = new Value(this.name, this.type);
+      val = []; //new Value @name, @type
 
-        for (var _len = arguments.length, vals = Array(_len), _key = 0; _key < _len; _key++) {
-          vals[_key] = arguments[_key];
-        }
+      for (var _len = arguments.length, vals = Array(_len), _key = 0; _key < _len; _key++) {
+        vals[_key] = arguments[_key];
+      }
 
-        for (i = j = 0, ref = this.vars.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
-          //console.log "Processing " + @vars[i].show()
-          //console.dir vals[i]
-          v = vals[i];
-          if (v != null) {
-            t = this.vars[i].type; // t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
-            if (t instanceof TypeVar) {
-              console.log("new Value creation - Partially implemented");
-              // 1. need to check type constrains (type classes etc), now NOT implemented
-              // 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
-              // 3. set the value to value
-              val[this.vars[i].name] = v;
+      for (i = j = 0, ref = this.vars.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+        //console.log "Processing " + @vars[i].show()
+        //console.dir vals[i]
+        v = vals[i];
+        if (v != null) {
+          t = this.vars[i].type; // t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
+          if (t instanceof TypeVar) {
+            console.log("new Value creation - Partially implemented");
+            // 1. need to check type constrains (type classes etc), now NOT implemented
+            // 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
+            // 3. set the value to value
+            val.push(v);
+          } else {
+            if (t.equals(Type.checkType(v))) {
+              // are the types ok? doesnt work for polymorphic yet!!!
+              val.push(v);
             } else {
-              if (t.equals(Type.checkType(v))) {
-                // are the types ok? doesnt work for polymorphic yet!!!
-                val[this.vars[i].name] = v;
-              } else {
-                throw "Type mismatch in assignment!";
-              }
+              throw "Type mismatch in assignment!";
             }
           }
         }
-        return val;
       }
+      val.push(this.name);
+      val.push(this.type);
+      return val;
     }
   }, {
     key: "newValue",
@@ -433,7 +437,8 @@ var Type = exports.Type = function () {
     //export cons.new as cons.name
     //@[cons.name].bind cons # binding this to newly created constructor
 
-    // helper function that returns name of the type *even if v is not Value* but a primitive type
+    // checking if v is a tuple - for now, checking type of last element in the array (which is Type now),
+    // but will need optimized away
 
   }, {
     key: "shortShow",
@@ -468,20 +473,33 @@ var Type = exports.Type = function () {
     // returns array of all types pretty printed as Strings
 
   }], [{
+    key: "isTuple",
+    value: function isTuple(v) {
+      return v instanceof Array && v[v.length - 1] instanceof Type;
+    }
+
+    // helper function that returns name of the type *even if v is not Value* but a primitive type
+
+  }, {
     key: "checkType",
     value: function checkType(v) {
       if (v instanceof Value) {
         return v._type_;
       } else {
-        switch (typeof v === "undefined" ? "undefined" : _typeof(v)) {
-          case "string":
-            return Type.String;
-          case "number":
-            return Type.Float;
-          case "boolean":
-            return Type.Bool;
-          default:
-            throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " -- shouldn't happen!";
+        if (Type.isTuple(v)) {
+          // checking if it's a tuple
+          return v[v.length - 1];
+        } else {
+          switch (typeof v === "undefined" ? "undefined" : _typeof(v)) {
+            case "string":
+              return Type.String;
+            case "number":
+              return Type.Float;
+            case "boolean":
+              return Type.Bool;
+            default:
+              throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " -- shouldn't happen!";
+          }
         }
       }
     }
@@ -491,15 +509,20 @@ var Type = exports.Type = function () {
       if (v instanceof Value) {
         return v._constructorTag_;
       } else {
-        switch (typeof v === "undefined" ? "undefined" : _typeof(v)) {
-          case "string":
-            return "String";
-          case "number":
-            return "Float";
-          case "boolean":
-            return "Bool";
-          default:
-            throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " -- shouldn't happen!";
+        if (Type.isTuple(v)) {
+          // checking if it's a tuple
+          return v[v.length - 2];
+        } else {
+          switch (typeof v === "undefined" ? "undefined" : _typeof(v)) {
+            case "string":
+              return "String";
+            case "number":
+              return "Float";
+            case "boolean":
+              return "Bool";
+            default:
+              throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " -- shouldn't happen!";
+          }
         }
       }
     }
@@ -520,7 +543,36 @@ var Type = exports.Type = function () {
   return Type;
 }();
 
-// some built in types
+/*
+HELPER FUNCTIONS --------------------------------------------------------------
+*/
+// show - only Tuple for now
+_show = function show(val) {
+  var top_level = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+
+  var _constructorTag_, i, j, ref, ret;
+  //keys = (v for v in Object.keys(@) when v not in ["show", "_constructorTag_", "_type_"])
+  _constructorTag_ = val[val.length - 2];
+  ret = val.length > 2 && !top_level ? "(" + _constructorTag_ : _constructorTag_; //+ " :: " + @_type_.name
+  //console.log "Properties: --------------------------"
+  //console.dir keys
+  for (i = j = 0, ref = val.length - 2; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+    if (Type.isTuple(val[i])) {
+      ret = ret + " " + _show(val[i], false);
+    } else {
+      ret += typeof val[i] === "string" ? " '" + val[i] + "'" : " " + val[i].toString();
+    }
+  }
+  ret = val.length > 2 && !top_level ? ret + ")" : ret;
+  if (top_level) {
+    ret = ret + " :: " + val[val.length - 1].name;
+  }
+  return ret;
+};
+
+/*
+ * some built in types --------------------------------------------------------------
+ */
 TOP = new Type("_TOP_"); // top type of all types - for the future subtyping?
 
 BOTTOM = new Type("_BOTTOM_"); // _|_ in Haskell
@@ -645,27 +697,30 @@ f1.match("Z", function () {
   return 0;
 });
 
-f1.match("S", function (x) {
-  return 1 + f1.ap(x['0']);
+f1.match("S", function (_ref) {
+  var _ref2 = _slicedToArray(_ref, 1),
+      x = _ref2[0];
+
+  return 1 + f1.ap(x);
 });
 
 toInt = f1.ap;
 
 // the below works, so we *can* pattern match quite nicely
 // problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
-ttf = function ttf(_ref) {
-  var x = _ref.x,
-      y = _ref.y;
+ttf = function ttf(_ref3) {
+  var x = _ref3.x,
+      y = _ref3.y;
 
   console.log("testing destructuring assignment");
   console.dir(arguments);
   return console.log(x, y);
 };
 
-tta = function tta(_ref2) {
-  var _ref3 = _slicedToArray(_ref2, 2),
-      x = _ref3[0],
-      y = _ref3[1];
+tta = function tta(_ref4) {
+  var _ref5 = _slicedToArray(_ref4, 2),
+      x = _ref5[0],
+      y = _ref5[1];
 
   console.log("testing array destructuring assignment");
   console.dir(arguments);
@@ -674,10 +729,10 @@ tta = function tta(_ref2) {
 
 // different test runs
 runTests = function runTests() {
-  var j1, j2, j3, ttfa, two, y0, y1;
+  var j1, j2, j3, two, y0, y1;
   two = S(S(S(S(Z()))));
-  console.log(Z().show());
-  console.log(two.show());
+  console.log(_show(Z())); //.show()
+  console.log(_show(two)); //.show()
   y0 = toInt(Z());
   y1 = toInt(two);
   console.log(y0, y1);
@@ -687,15 +742,9 @@ runTests = function runTests() {
   j1 = Just(2);
   j2 = Just("Hello");
   j3 = Just(two);
-  console.log(j1.show());
-  console.log(j2.show());
-  console.log(j3.show());
-  ttfa = {
-    x: 1,
-    y: "hello"
-  };
-  ttf(ttfa);
-  return tta([10, two]);
+  console.log(_show(j1));
+  console.log(_show(j2));
+  return console.log(_show(j3));
 };
 
 runTests();
