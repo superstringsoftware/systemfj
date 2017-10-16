@@ -23,6 +23,7 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 // base class shouldnt be used directly
 var BOTTOM,
     EMPTY,
+    FUNCTION,
     JBool,
     JFloat,
     JInt,
@@ -34,7 +35,9 @@ var BOTTOM,
     id,
     imagPart,
     isZero,
+    length,
     magnitude,
+    map,
     realPart,
     runTests,
     _show,
@@ -275,7 +278,7 @@ var Constructor = exports.Constructor = function () {
         if (v != null) {
           t = this.vars[i].type; // t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
           if (t instanceof TypeVar) {
-            console.log("new Value creation - Partially implemented");
+            // console.log "new Value creation - Partially implemented"
             // 1. need to check type constrains (type classes etc), now NOT implemented
             // 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
             // 3. set the value to value
@@ -505,26 +508,32 @@ var Type = exports.Type = function () {
         }
       }
     }
+
+    // this is a key function - used in function pattern matching etc
+
   }, {
     key: "checkConstructor",
     value: function checkConstructor(v) {
+      if (v === _) {
+        _;
+      }
       if (v instanceof Value) {
-        return v._constructorTag_;
+        v._constructorTag_;
+      }
+      if (Type.isTuple(v)) {
+        return v[v.length - 2];
       } else {
-        if (Type.isTuple(v)) {
-          // checking if it's a tuple
-          return v[v.length - 2];
-        } else {
-          switch (typeof v === "undefined" ? "undefined" : _typeof(v)) {
-            case "string":
-              return "String";
-            case "number":
-              return "Float";
-            case "boolean":
-              return "Bool";
-            default:
-              throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " -- shouldn't happen!";
-          }
+        switch (typeof v === "undefined" ? "undefined" : _typeof(v)) {
+          case "string":
+            return "String";
+          case "number":
+            return "Float";
+          case "boolean":
+            return "Bool";
+          case "function":
+            return "Function"; // ok, this is actually not good, since pattern matching won't work with curried functions this way
+          default:
+            throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " -- shouldn't happen!";
         }
       }
     }
@@ -583,6 +592,8 @@ EMPTY = new Type("_EMPTY_"); // () in Haskell
 
 UNIT = new Type("_UNIT_", "Unit"); // type with a single element
 
+FUNCTION = new Type("FUNCTION"); // placeholder for all functions, eventually needs to be replaced with proper (a -> b) signatures
+
 // exposing constructors for cleaner syntax
 Unit = UNIT.Unit;
 
@@ -630,12 +641,25 @@ var Func = exports.Func = function () {
     _classCallCheck(this, Func);
 
     var i, j, ref;
+    //console.log "Created function " + @name + " with arguments:"
+    //console.log @vars
+
     // adding a default pattern match
     this.default = this.default.bind(this);
+    // single argument call
+    this.matchOne = this.matchOne.bind(this);
+    // many arguments pattern match
+    // tricky since we need to handle empty pattern (_) somehow
+    this.matchMany = this.matchMany.bind(this);
+    // general match function, handles 3 cases:
+    // 1. no pattern, so "match (x)->x" - default match, simply a function definition
+    // 2. pattern is a string - so, 1 argument function, e.g. "match 'Nil', -> Nil()"
+    // 3. pattern is an array of patterns, so many arguments function e.g. "match [f, "Cell"], (f, [x, tail]) -> ..."
     this.match = this.match.bind(this);
 
-    // function application - think through
+    // function application - think through. now extremely inefficient, esp. w/ recursive functions
     // now only works with 1 argument - think about lambda for many argument functions???
+    // now there's no partial application and we do need it!!!
     this.ap = this.ap.bind(this);
     this.show = this.show.bind(this);
     this.name = name1;
@@ -646,6 +670,7 @@ var Func = exports.Func = function () {
       varTypes[_key4 - 1] = arguments[_key4];
     }
 
+    this.returnType = varTypes.pop();
     for (i = j = 0, ref = varTypes.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
       this.vars.push(new Var(i.toString(), -1, varTypes[i]));
     }
@@ -653,33 +678,77 @@ var Func = exports.Func = function () {
     this.functions["__DEFAULT__"] = function () {
       throw "Non-exaustive pattern match in definition of " + _this3.show();
     };
+    this.fdef = this.functions["__DEFAULT__"];
   }
 
   _createClass(Func, [{
     key: "default",
     value: function _default(func) {
       this.functions["__DEFAULT__"] = func;
-      return this;
+      return this.fdef = func;
+    }
+  }, {
+    key: "matchOne",
+    value: function matchOne(consTag, func) {
+      return this.functions[consTag] = func;
+    }
+  }, {
+    key: "matchMany",
+    value: function matchMany(patterns, func) {
+      var j, len, pat, v;
+      pat = ""; // building a pattern first
+      for (j = 0, len = patterns.length; j < len; j++) {
+        v = patterns[j];
+        pat += v;
+      }
+      return this.functions[pat] = func;
     }
   }, {
     key: "match",
-    value: function match(consTag, func) {
-      this.functions[consTag] = func;
+    value: function match(patterns, func) {
+      switch (typeof patterns === "undefined" ? "undefined" : _typeof(patterns)) {
+        case "function":
+          // -- it's a default
+          this.default(patterns);
+          break;
+        case "string":
+          // -- it's a 1-arg function
+          this.matchOne(patterns, func);
+          break;
+        default:
+          if (patterns instanceof Array) {
+            console.log("multiple pattern match");
+            this.matchMany(patterns, func);
+          } else {
+            throw "Unrecognized pattern in pattern match definition of" + this.show();
+          }
+      }
       return this;
     }
   }, {
     key: "ap",
     value: function ap() {
-      var f, t, v;
-      v = arguments.length <= 0 ? undefined : arguments[0];
-      t = Type.checkConstructor(v);
+      var f, j, len, pat, v;
+      //console.log "Calling function " + @name + " with args:"
+      //console.log vals
+      pat = ""; // building a pattern first
+
+      for (var _len5 = arguments.length, vals = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
+        vals[_key5] = arguments[_key5];
+      }
+
+      for (j = 0, len = vals.length; j < len; j++) {
+        v = vals[j];
+        pat += Type.checkConstructor(v);
+      }
+      //console.log "Pattern in pattern application: " + pat
       // pattern matching first
-      f = this.functions[t];
+      f = this.functions[pat];
       // calling matched function with the argument
       if (f != null) {
-        return f(v);
+        return f.apply(this, vals);
       } else {
-        return this.functions["__DEFAULT__"](v);
+        return this.fdef.apply(this, vals);
       }
     }
   }, {
@@ -695,16 +764,19 @@ var Func = exports.Func = function () {
         }
         ret += this.vars[this.vars.length - 1].type.name;
       }
-      return ret;
+      return ret += " -> " + this.returnType.name;
     }
   }]);
 
   return Func;
 }();
 
+var _ = exports._ = "__ANY_PATTERN_MATCH__"; // exporting _ for empty pattern matches
+
+
 // id - checking "default" functionality and polymorphic functions
 // for now, works in terms of default but there's no polymorphic type checks etc
-id = new Func("id").default(function (x) {
+id = new Func("id").match(function (x) {
   return x;
 }).ap;
 
@@ -738,7 +810,7 @@ realPart = new Func("realPart", Type.Complex, Type.Float).match("Complex", funct
 
 imagPart = new Func("realPart", Type.Complex, Type.Float).match("Complex", function (_ref5) {
   var _ref6 = _slicedToArray(_ref5, 2),
-      x = _ref6[0],
+      _ = _ref6[0],
       y = _ref6[1];
 
   return y;
@@ -752,21 +824,43 @@ magnitude = new Func("magnitude", Type.Complex, Type.Float).match("Complex", fun
   return x * x + y * y;
 }).ap;
 
+// List - basic recursive type, very much needed for some advanced experiments - mapping functions, recursion etc
+length = new Func("length", Type.List, Type.Int).match("Nil", function () {
+  return 0;
+}).match("Cell", function (_ref9) {
+  var _ref10 = _slicedToArray(_ref9, 2),
+      _ = _ref10[0],
+      tail = _ref10[1];
+
+  return 1 + length(tail);
+}).ap;
+
+// ok, map is more complicated right away because it takes 2 parameters
+map = new Func("map", Type.FUNCTION, Type.List, Type.List).match(["Function", "Nil"], function () {
+  return Nil();
+}).match(["Function", "Cell"], function (f, _ref11) {
+  var _ref12 = _slicedToArray(_ref11, 2),
+      x = _ref12[0],
+      tail = _ref12[1];
+
+  return Cell(f(x), map(f, tail));
+}).ap;
+
 // the below works, so we *can* pattern match quite nicely
 // problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
-ttf = function ttf(_ref9) {
-  var x = _ref9.x,
-      y = _ref9.y;
+ttf = function ttf(_ref13) {
+  var x = _ref13.x,
+      y = _ref13.y;
 
   console.log("testing destructuring assignment");
   console.dir(arguments);
   return console.log(x, y);
 };
 
-tta = function tta(_ref10) {
-  var _ref11 = _slicedToArray(_ref10, 2),
-      x = _ref11[0],
-      y = _ref11[1];
+tta = function tta(_ref14) {
+  var _ref15 = _slicedToArray(_ref14, 2),
+      x = _ref15[0],
+      y = _ref15[1];
 
   console.log("testing array destructuring assignment");
   console.dir(arguments);
@@ -775,7 +869,7 @@ tta = function tta(_ref10) {
 
 // different test runs
 runTests = function runTests() {
-  var c1, j1, j2, j3, two, y0, y1;
+  var c1, j1, j2, j3, l, m, two, y0, y1;
   two = S(S(S(S(Z()))));
   console.log(_show(Z())); //.show()
   console.log(_show(two)); //.show()
@@ -799,7 +893,15 @@ runTests = function runTests() {
   //console.log module 5
   console.log(id(4));
   console.log(id("hello"));
-  return console.log(_show(id(two)));
+  console.log(_show(id(two)));
+  l = Cell(1, Cell(2, Cell(3, Nil())));
+  console.log(_show(l));
+  console.log("Length of l: " + length(l));
+  console.log("Testing map");
+  m = map(function (x) {
+    return x * 2;
+  }, l);
+  return console.log(_show(m));
 };
 
 runTests();

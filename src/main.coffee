@@ -7,12 +7,6 @@ tCustom = new Type "Custom", "Cons Float String"
 
 #console.log t for t in Type.showAllTypes()
 
-length = new Func "length"
-length.match "Nil", -> 0
-length.match "Cell", (x) -> 1 + length.ap (tail x)
-
-
-
 #_id = new Func "id"
 
 #console.log f1.show()

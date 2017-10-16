@@ -100,7 +100,7 @@ export class Constructor
       if v?
         t = @vars[i].type # t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
         if (t instanceof TypeVar)
-          console.log "new Value creation - Partially implemented"
+          # console.log "new Value creation - Partially implemented"
           # 1. need to check type constrains (type classes etc), now NOT implemented
           # 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
           # 3. set the value to value
@@ -215,18 +215,18 @@ export class Type
           when "boolean" then Type.Bool
           else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
 
+  # this is a key function - used in function pattern matching etc
   @checkConstructor: (v) ->
-    if (v instanceof Value)
-      v._constructorTag_
+    if v == _ then _
+    if (v instanceof Value) then v._constructorTag_
+    if Type.isTuple v then v[v.length-2]
     else
-      if Type.isTuple v # checking if it's a tuple
-        v[v.length-2]
-      else
-        switch (typeof v)
-          when "string" then "String"
-          when "number" then "Float"
-          when "boolean" then "Bool"
-          else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
+      switch (typeof v)
+        when "string" then "String"
+        when "number" then "Float"
+        when "boolean" then "Bool"
+        when "function" then "Function" # ok, this is actually not good, since pattern matching won't work with curried functions this way
+        else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
 
   shortShow: (inside = false)=>
     ret = if (@vars.length > 0) and inside then "(" + @name else @name
@@ -278,6 +278,7 @@ TOP = new Type "_TOP_" # top type of all types - for the future subtyping?
 BOTTOM = new Type "_BOTTOM_" # _|_ in Haskell
 EMPTY = new Type "_EMPTY_" # () in Haskell
 UNIT = new Type "_UNIT_", "Unit" # type with a single element
+FUNCTION = new Type "FUNCTION" # placeholder for all functions, eventually needs to be replaced with proper (a -> b) signatures
 # exposing constructors for cleaner syntax
 Unit = UNIT.Unit
 
@@ -311,29 +312,59 @@ export class Func
   constructor: (@name, varTypes...) ->
     @functions = {}
     @vars = []
+    @returnType = varTypes.pop()
     for i in [0...varTypes.length]
       @vars.push new Var i.toString(), -1, varTypes[i]
     # adding a default catch all function
     @functions["__DEFAULT__"] = => throw "Non-exaustive pattern match in definition of " + @show()
+    @fdef = @functions["__DEFAULT__"]
+    #console.log "Created function " + @name + " with arguments:"
+    #console.log @vars
 
   # adding a default pattern match
-  default: (func) =>
-    @functions["__DEFAULT__"] = func
+  default: (func) => @functions["__DEFAULT__"] = func; @fdef = func
+
+  # single argument call
+  matchOne: (consTag, func) => @functions[consTag] = func
+
+  # many arguments pattern match
+  # tricky since we need to handle empty pattern (_) somehow
+  matchMany: (patterns, func) =>
+    pat = "" # building a pattern first
+    pat += v for v in patterns
+    @functions[pat] = func
+
+  # general match function, handles 3 cases:
+  # 1. no pattern, so "match (x)->x" - default match, simply a function definition
+  # 2. pattern is a string - so, 1 argument function, e.g. "match 'Nil', -> Nil()"
+  # 3. pattern is an array of patterns, so many arguments function e.g. "match [f, "Cell"], (f, [x, tail]) -> ..."
+  match: (patterns, func) =>
+    switch typeof patterns
+      when "function" # -- it's a default
+        @default patterns
+      when "string" # -- it's a 1-arg function
+        @matchOne patterns, func
+      else
+        if (patterns instanceof Array)
+          console.log "multiple pattern match"
+          @matchMany patterns, func
+        else throw "Unrecognized pattern in pattern match definition of" + @show()
     @ # for chaining
 
-  match: (consTag, func) =>
-    @functions[consTag] = func
-    @ # returning 'this' for cool function chaining when defining pattern matched functions
 
-  # function application - think through
+  # function application - think through. now extremely inefficient, esp. w/ recursive functions
   # now only works with 1 argument - think about lambda for many argument functions???
+  # now there's no partial application and we do need it!!!
   ap: (vals...) =>
-    v = vals[0]
-    t = Type.checkConstructor v
+    #console.log "Calling function " + @name + " with args:"
+    #console.log vals
+    pat = "" # building a pattern first
+    pat += Type.checkConstructor v for v in vals
+    #console.log "Pattern in pattern application: " + pat
     # pattern matching first
-    f = @functions[t]
+    f = @functions[pat]
     # calling matched function with the argument
-    if f? then f v else @functions["__DEFAULT__"] v
+    if f? then f.apply @, vals else @fdef.apply @, vals
 
   show: =>
     ret = @name + " :: "
@@ -343,12 +374,14 @@ export class Func
       for i in [0...@vars.length-1]
         ret += @vars[i].type.name + " -> "
       ret += @vars[@vars.length-1].type.name
-    ret
+    ret += " -> " + @returnType.name
+
+export _ = "__ANY_PATTERN_MATCH__" # exporting _ for empty pattern matches
 
 # id - checking "default" functionality and polymorphic functions
 # for now, works in terms of default but there's no polymorphic type checks etc
 id = new Func "id"
-  .default (x)->x
+  .match (x)->x
   .ap
 
 # Nat functions - to work on functions implementations
@@ -372,13 +405,24 @@ realPart = new Func "realPart", Type.Complex, Type.Float
   .ap
 
 imagPart = new Func "realPart", Type.Complex, Type.Float
-  .match "Complex", ([x,y]) -> y
+  .match "Complex", ([_,y]) -> y
   .ap
 
 magnitude = new Func "magnitude", Type.Complex, Type.Float
-              .match "Complex", ([x,y]) -> x*x + y*y
-              .ap
+  .match "Complex", ([x,y]) -> x*x + y*y
+  .ap
 
+# List - basic recursive type, very much needed for some advanced experiments - mapping functions, recursion etc
+length = new Func "length", Type.List, Type.Int
+  .match "Nil", -> 0
+  .match "Cell", ([_, tail]) -> 1 + length tail
+  .ap
+
+# ok, map is more complicated right away because it takes 2 parameters
+map = new Func "map", Type.FUNCTION, Type.List, Type.List
+  .match ["Function", "Nil"], -> Nil()
+  .match ["Function", "Cell"], (f, [x, tail]) -> Cell (f x), (map f, tail)
+  .ap
 
 # the below works, so we *can* pattern match quite nicely
 # problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
@@ -421,6 +465,13 @@ runTests = ->
   console.log id 4
   console.log id "hello"
   console.log show id two
+
+  l = Cell 1, (Cell 2, (Cell 3, Nil()))
+  console.log show l
+  console.log "Length of l: " + length l
+  console.log "Testing map"
+  m = map ((x)->x*2), l
+  console.log show m
 
 
 
