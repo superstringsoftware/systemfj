@@ -317,6 +317,7 @@ export class Func
 
   match: (consTag, func) =>
     @functions[consTag] = func
+    @ # returning 'this' for cool function chaining when defining pattern matched functions
 
   # function application - think through
   # now only works with 1 argument - think about lambda for many argument functions???
@@ -338,15 +339,23 @@ export class Func
 
 
 # Nat functions - to work on functions implementations
-fisZero = new Func "isZero", Type.Nat, Type.Bool
-fisZero.match "Z", -> true
-fisZero.match "S", -> false
-isZero = fisZero.ap
+isZero = new Func "isZero", Type.Nat, Type.Bool
+  .match "Z", -> true
+  .match "S", -> false
+  .ap
 
-f1 = new Func "toInt", Type.Nat, Type.Int
-f1.match "Z", -> 0
-f1.match "S", ([x]) -> 1 + f1.ap x
-toInt = f1.ap
+toInt = new Func "toInt", Type.Nat, Type.Int
+  .match "Z", -> 0
+  .match "S", ([x]) -> 1 + toInt x # wow, recursion is automatically beautiful in this model!!!
+  .ap
+
+
+export Complex = (new Type "Complex", "Complex Float Float").Complex
+
+module = new Func "module", Type.Complex, Type.Float
+              .match "Complex", ([x,y]) -> x*x + y*y
+              .ap
+
 
 # the below works, so we *can* pattern match quite nicely
 # problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
@@ -378,6 +387,10 @@ runTests = ->
   console.log show j1
   console.log show j2
   console.log show j3
+
+  c1 = Complex 2.3, -1.4
+  console.log show c1
+  console.log module c1
 
 
 

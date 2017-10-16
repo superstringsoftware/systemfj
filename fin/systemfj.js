@@ -31,9 +31,8 @@ var BOTTOM,
     TOP,
     UNIT,
     Unit,
-    f1,
-    fisZero,
     isZero,
+    _module,
     runTests,
     _show,
     toInt,
@@ -627,6 +626,7 @@ var Func = exports.Func = function () {
 
     var i, j, ref;
     this.match = this.match.bind(this);
+
     // function application - think through
     // now only works with 1 argument - think about lambda for many argument functions???
     this.ap = this.ap.bind(this);
@@ -647,7 +647,8 @@ var Func = exports.Func = function () {
   _createClass(Func, [{
     key: "match",
     value: function match(consTag, func) {
-      return this.functions[consTag] = func;
+      this.functions[consTag] = func;
+      return this;
     }
   }, {
     key: "ap",
@@ -679,48 +680,46 @@ var Func = exports.Func = function () {
 }();
 
 // Nat functions - to work on functions implementations
-fisZero = new Func("isZero", Type.Nat, Type.Bool);
-
-fisZero.match("Z", function () {
+isZero = new Func("isZero", Type.Nat, Type.Bool).match("Z", function () {
   return true;
-});
-
-fisZero.match("S", function () {
+}).match("S", function () {
   return false;
-});
+}).ap;
 
-isZero = fisZero.ap;
-
-f1 = new Func("toInt", Type.Nat, Type.Int);
-
-f1.match("Z", function () {
+toInt = new Func("toInt", Type.Nat, Type.Int).match("Z", function () {
   return 0;
-});
-
-f1.match("S", function (_ref) {
+}).match("S", function (_ref) {
   var _ref2 = _slicedToArray(_ref, 1),
       x = _ref2[0];
 
-  return 1 + f1.ap(x);
-});
+  return 1 + toInt(x); // wow, recursion is automatically beautiful in this model!!!
+}).ap;
 
-toInt = f1.ap;
+var Complex = exports.Complex = new Type("Complex", "Complex Float Float").Complex;
+
+_module = new Func("module", Type.Complex, Type.Float).match("Complex", function (_ref3) {
+  var _ref4 = _slicedToArray(_ref3, 2),
+      x = _ref4[0],
+      y = _ref4[1];
+
+  return x * x + y * y;
+}).ap;
 
 // the below works, so we *can* pattern match quite nicely
 // problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
-ttf = function ttf(_ref3) {
-  var x = _ref3.x,
-      y = _ref3.y;
+ttf = function ttf(_ref5) {
+  var x = _ref5.x,
+      y = _ref5.y;
 
   console.log("testing destructuring assignment");
   console.dir(arguments);
   return console.log(x, y);
 };
 
-tta = function tta(_ref4) {
-  var _ref5 = _slicedToArray(_ref4, 2),
-      x = _ref5[0],
-      y = _ref5[1];
+tta = function tta(_ref6) {
+  var _ref7 = _slicedToArray(_ref6, 2),
+      x = _ref7[0],
+      y = _ref7[1];
 
   console.log("testing array destructuring assignment");
   console.dir(arguments);
@@ -729,7 +728,7 @@ tta = function tta(_ref4) {
 
 // different test runs
 runTests = function runTests() {
-  var j1, j2, j3, two, y0, y1;
+  var c1, j1, j2, j3, two, y0, y1;
   two = S(S(S(S(Z()))));
   console.log(_show(Z())); //.show()
   console.log(_show(two)); //.show()
@@ -744,7 +743,10 @@ runTests = function runTests() {
   j3 = Just(two);
   console.log(_show(j1));
   console.log(_show(j2));
-  return console.log(_show(j3));
+  console.log(_show(j3));
+  c1 = Complex(2.3, -1.4);
+  console.log(_show(c1));
+  return console.log(_module(c1));
 };
 
 runTests();
