@@ -450,8 +450,8 @@ map = new Func "map", Type.FUNCTION, Type.List, Type.List
   .match ["Function", "Cell"], (f, [x, tail]) -> Cell (f x), (map f, tail)
   .ap
 
-testF = new Func "testF", Type.Float, Type.Float, Type.Float
-  .match ["Float", "Float"], (x,y) -> x * y
+testF = new Func "testF", Type.Float, Type.Float, Type.Float, Type.Float
+  .match ["Float", "Float", "Float"], (x,y,z) -> x * y + z
   .ap
 
 
@@ -493,13 +493,13 @@ runTests = ->
   console.log show m
 
   console.log "Testing partial application"
-  console.log testF 4, 7
+  console.log testF 4, 7, 2
   testF4 = testF 4
-  testF7 = testF 7
-  console.log testF4 7
-  console.log testF7 4
-  console.log testF7 7
-  console.log testF 1, 2
+  testF47 = testF4 7
+  console.log testF4 7, 2
+  console.log testF47 2
+  #console.log testF7 7
+  console.log testF 1, 2, 0
 
 
 

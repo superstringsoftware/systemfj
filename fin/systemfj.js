@@ -887,13 +887,13 @@ map = new Func("map", Type.FUNCTION, Type.List, Type.List).match(["Function", "N
   return Cell(f(x), map(f, tail));
 }).ap;
 
-testF = new Func("testF", Type.Float, Type.Float, Type.Float).match(["Float", "Float"], function (x, y) {
-  return x * y;
+testF = new Func("testF", Type.Float, Type.Float, Type.Float, Type.Float).match(["Float", "Float", "Float"], function (x, y, z) {
+  return x * y + z;
 }).ap;
 
 // different test runs
 runTests = function runTests() {
-  var c1, j1, j2, j3, l, m, testF4, testF7, two, y0, y1;
+  var c1, j1, j2, j3, l, m, testF4, testF47, two, y0, y1;
   two = S(S(S(S(Z()))));
   console.log(_show(Z())); //.show()
   console.log(_show(two)); //.show()
@@ -927,13 +927,13 @@ runTests = function runTests() {
   }, l);
   console.log(_show(m));
   console.log("Testing partial application");
-  console.log(testF(4, 7));
+  console.log(testF(4, 7, 2));
   testF4 = testF(4);
-  testF7 = testF(7);
-  console.log(testF4(7));
-  console.log(testF7(4));
-  console.log(testF7(7));
-  return console.log(testF(1, 2));
+  testF47 = testF4(7);
+  console.log(testF4(7, 2));
+  console.log(testF47(2));
+  //console.log testF7 7
+  return console.log(testF(1, 2, 0));
 };
 
 runTests();
