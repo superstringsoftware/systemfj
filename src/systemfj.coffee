@@ -313,7 +313,13 @@ export class Func
     @vars = []
     for i in [0...varTypes.length]
       @vars.push new Var i.toString(), -1, varTypes[i]
+    # adding a default catch all function
+    @functions["__DEFAULT__"] = => throw "Non-exaustive pattern match in definition of " + @show()
 
+  # adding a default pattern match
+  default: (func) =>
+    @functions["__DEFAULT__"] = func
+    @ # for chaining
 
   match: (consTag, func) =>
     @functions[consTag] = func
@@ -325,7 +331,9 @@ export class Func
     v = vals[0]
     t = Type.checkConstructor v
     # pattern matching first
-    @functions[t] v # calling matched function with the argument
+    f = @functions[t]
+    # calling matched function with the argument
+    if f? then f v else @functions["__DEFAULT__"] v
 
   show: =>
     ret = @name + " :: "
@@ -337,6 +345,11 @@ export class Func
       ret += @vars[@vars.length-1].type.name
     ret
 
+# id - checking "default" functionality and polymorphic functions
+# for now, works in terms of default but there's no polymorphic type checks etc
+id = new Func "id"
+  .default (x)->x
+  .ap
 
 # Nat functions - to work on functions implementations
 isZero = new Func "isZero", Type.Nat, Type.Bool
@@ -349,10 +362,20 @@ toInt = new Func "toInt", Type.Nat, Type.Int
   .match "S", ([x]) -> 1 + toInt x # wow, recursion is automatically beautiful in this model!!!
   .ap
 
-
+# complex type and some functions, loosely following Haskell interface
+# in Haskell, Complex is actually a type constructor: data Complex a
+# we only have quick and dirty Float implementation
 export Complex = (new Type "Complex", "Complex Float Float").Complex
 
-module = new Func "module", Type.Complex, Type.Float
+realPart = new Func "realPart", Type.Complex, Type.Float
+  .match "Complex", ([x]) -> x
+  .ap
+
+imagPart = new Func "realPart", Type.Complex, Type.Float
+  .match "Complex", ([x,y]) -> y
+  .ap
+
+magnitude = new Func "magnitude", Type.Complex, Type.Float
               .match "Complex", ([x,y]) -> x*x + y*y
               .ap
 
@@ -390,7 +413,14 @@ runTests = ->
 
   c1 = Complex 2.3, -1.4
   console.log show c1
-  console.log module c1
+  console.log magnitude c1
+  console.log "Real: " + realPart c1
+  console.log "Imag: " + imagPart c1
+  #console.log module 5
+
+  console.log id 4
+  console.log id "hello"
+  console.log show id two
 
 
 

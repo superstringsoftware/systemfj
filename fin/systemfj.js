@@ -31,8 +31,11 @@ var BOTTOM,
     TOP,
     UNIT,
     Unit,
+    id,
+    imagPart,
     isZero,
-    _module,
+    magnitude,
+    realPart,
     runTests,
     _show,
     toInt,
@@ -622,9 +625,13 @@ var S = exports.S = Type.Nat.S;
 var Func = exports.Func = function () {
   // creating a function with specific types. Last one in the list should be return type!!!
   function Func(name1) {
+    var _this3 = this;
+
     _classCallCheck(this, Func);
 
     var i, j, ref;
+    // adding a default pattern match
+    this.default = this.default.bind(this);
     this.match = this.match.bind(this);
 
     // function application - think through
@@ -642,9 +649,19 @@ var Func = exports.Func = function () {
     for (i = j = 0, ref = varTypes.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
       this.vars.push(new Var(i.toString(), -1, varTypes[i]));
     }
+    // adding a default catch all function
+    this.functions["__DEFAULT__"] = function () {
+      throw "Non-exaustive pattern match in definition of " + _this3.show();
+    };
   }
 
   _createClass(Func, [{
+    key: "default",
+    value: function _default(func) {
+      this.functions["__DEFAULT__"] = func;
+      return this;
+    }
+  }, {
     key: "match",
     value: function match(consTag, func) {
       this.functions[consTag] = func;
@@ -653,11 +670,17 @@ var Func = exports.Func = function () {
   }, {
     key: "ap",
     value: function ap() {
-      var t, v;
+      var f, t, v;
       v = arguments.length <= 0 ? undefined : arguments[0];
       t = Type.checkConstructor(v);
       // pattern matching first
-      return this.functions[t](v); // calling matched function with the argument
+      f = this.functions[t];
+      // calling matched function with the argument
+      if (f != null) {
+        return f(v);
+      } else {
+        return this.functions["__DEFAULT__"](v);
+      }
     }
   }, {
     key: "show",
@@ -679,6 +702,12 @@ var Func = exports.Func = function () {
   return Func;
 }();
 
+// id - checking "default" functionality and polymorphic functions
+// for now, works in terms of default but there's no polymorphic type checks etc
+id = new Func("id").default(function (x) {
+  return x;
+}).ap;
+
 // Nat functions - to work on functions implementations
 isZero = new Func("isZero", Type.Nat, Type.Bool).match("Z", function () {
   return true;
@@ -695,31 +724,49 @@ toInt = new Func("toInt", Type.Nat, Type.Int).match("Z", function () {
   return 1 + toInt(x); // wow, recursion is automatically beautiful in this model!!!
 }).ap;
 
+// complex type and some functions, loosely following Haskell interface
+// in Haskell, Complex is actually a type constructor: data Complex a
+// we only have quick and dirty Float implementation
 var Complex = exports.Complex = new Type("Complex", "Complex Float Float").Complex;
 
-_module = new Func("module", Type.Complex, Type.Float).match("Complex", function (_ref3) {
-  var _ref4 = _slicedToArray(_ref3, 2),
-      x = _ref4[0],
-      y = _ref4[1];
+realPart = new Func("realPart", Type.Complex, Type.Float).match("Complex", function (_ref3) {
+  var _ref4 = _slicedToArray(_ref3, 1),
+      x = _ref4[0];
+
+  return x;
+}).ap;
+
+imagPart = new Func("realPart", Type.Complex, Type.Float).match("Complex", function (_ref5) {
+  var _ref6 = _slicedToArray(_ref5, 2),
+      x = _ref6[0],
+      y = _ref6[1];
+
+  return y;
+}).ap;
+
+magnitude = new Func("magnitude", Type.Complex, Type.Float).match("Complex", function (_ref7) {
+  var _ref8 = _slicedToArray(_ref7, 2),
+      x = _ref8[0],
+      y = _ref8[1];
 
   return x * x + y * y;
 }).ap;
 
 // the below works, so we *can* pattern match quite nicely
 // problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
-ttf = function ttf(_ref5) {
-  var x = _ref5.x,
-      y = _ref5.y;
+ttf = function ttf(_ref9) {
+  var x = _ref9.x,
+      y = _ref9.y;
 
   console.log("testing destructuring assignment");
   console.dir(arguments);
   return console.log(x, y);
 };
 
-tta = function tta(_ref6) {
-  var _ref7 = _slicedToArray(_ref6, 2),
-      x = _ref7[0],
-      y = _ref7[1];
+tta = function tta(_ref10) {
+  var _ref11 = _slicedToArray(_ref10, 2),
+      x = _ref11[0],
+      y = _ref11[1];
 
   console.log("testing array destructuring assignment");
   console.dir(arguments);
@@ -746,7 +793,13 @@ runTests = function runTests() {
   console.log(_show(j3));
   c1 = Complex(2.3, -1.4);
   console.log(_show(c1));
-  return console.log(_module(c1));
+  console.log(magnitude(c1));
+  console.log("Real: " + realPart(c1));
+  console.log("Imag: " + imagPart(c1));
+  //console.log module 5
+  console.log(id(4));
+  console.log(id("hello"));
+  return console.log(_show(id(two)));
 };
 
 runTests();
