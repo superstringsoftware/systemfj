@@ -24,7 +24,7 @@ toInt two -- = 2
 #### SystemFJ:
 
 ```coffeescript
-Nat = new Type "Nat", "Z", "S Nat"
+Type.new "Nat", "Z", "S Nat"
 
 toInt = new Func "toInt", Type.Nat, Type.Int
   .match "Z", -> 0
@@ -59,7 +59,7 @@ map f (Cell x xs) = Cell (f x) (map f xs)
 
 ```coffeescript
 # SystemFJ
-List = new Type "List a", "Cell a List", "Nil"
+Type.new "List a", "Cell a List", "Nil"
 
 # pattern matching is a bit cumbersome and raw with multiple argument functions that include functions...
 # ..but still follows Haskell quite closely
