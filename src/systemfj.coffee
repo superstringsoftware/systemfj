@@ -346,7 +346,7 @@ export class Func
         @matchOne patterns, func
       else
         if (patterns instanceof Array)
-          console.log "multiple pattern match"
+          #console.log "multiple pattern match"
           @matchMany patterns, func
         else throw "Unrecognized pattern in pattern match definition of" + @show()
     @ # for chaining
@@ -424,17 +424,6 @@ map = new Func "map", Type.FUNCTION, Type.List, Type.List
   .match ["Function", "Cell"], (f, [x, tail]) -> Cell (f x), (map f, tail)
   .ap
 
-# the below works, so we *can* pattern match quite nicely
-# problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
-ttf = ({x, y}) ->
-  console.log "testing destructuring assignment"
-  console.dir arguments
-  console.log x, y
-
-tta = ([x, y]) ->
-  console.log "testing array destructuring assignment"
-  console.dir arguments
-  console.log x, y
 
 # different test runs
 runTests = ->

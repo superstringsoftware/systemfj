@@ -42,8 +42,6 @@ var BOTTOM,
     runTests,
     _show,
     toInt,
-    tta,
-    ttf,
     boundMethodCheck = function boundMethodCheck(instance, Constructor) {
   if (!(instance instanceof Constructor)) {
     throw new Error('Bound instance method accessed before binding');
@@ -717,7 +715,7 @@ var Func = exports.Func = function () {
           break;
         default:
           if (patterns instanceof Array) {
-            console.log("multiple pattern match");
+            //console.log "multiple pattern match"
             this.matchMany(patterns, func);
           } else {
             throw "Unrecognized pattern in pattern match definition of" + this.show();
@@ -845,27 +843,6 @@ map = new Func("map", Type.FUNCTION, Type.List, Type.List).match(["Function", "N
 
   return Cell(f(x), map(f, tail));
 }).ap;
-
-// the below works, so we *can* pattern match quite nicely
-// problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
-ttf = function ttf(_ref13) {
-  var x = _ref13.x,
-      y = _ref13.y;
-
-  console.log("testing destructuring assignment");
-  console.dir(arguments);
-  return console.log(x, y);
-};
-
-tta = function tta(_ref14) {
-  var _ref15 = _slicedToArray(_ref14, 2),
-      x = _ref15[0],
-      y = _ref15[1];
-
-  console.log("testing array destructuring assignment");
-  console.dir(arguments);
-  return console.log(x, y);
-};
 
 // different test runs
 runTests = function runTests() {

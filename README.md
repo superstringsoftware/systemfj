@@ -72,8 +72,7 @@ map = new Func "map", Type.FUNCTION, Type.List, Type.List
 
 # then you can do:
 list = Cell 1, (Cell 2, (Cell 3, Nil()))
-m = map ((x)->x*2), l
-console.log show m
+console.log show map ((x)->x*2), list
 # > Cell 2 (Cell 4 (Cell 6 Nil)) :: List
 ```
 
