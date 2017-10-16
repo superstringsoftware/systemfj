@@ -4,6 +4,8 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
+var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
+
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
@@ -34,6 +36,8 @@ var BOTTOM,
     isZero,
     runTests,
     toInt,
+    tta,
+    ttf,
     boundMethodCheck = function boundMethodCheck(instance, Constructor) {
   if (!(instance instanceof Constructor)) {
     throw new Error('Bound instance method accessed before binding');
@@ -139,6 +143,7 @@ var Var = exports.Var = function (_Variable2) {
 }(Variable);
 
 // class for holding values - basically, a record. Do we even need a class here?
+// current thinking is - turn this into a record, tuples will be handled as a simple array (see Constructor)
 var Value = exports.Value = function () {
   // pass in constructorTag and reference to type, add value fields as needed
   // for now passing reference to Type, ideally need to do all type checking via
@@ -218,6 +223,9 @@ var Constructor = exports.Constructor = function () {
      Alternative approach: maybe more lightweight, use generic constructor function, but use some sort of specific type annotations.
     */
     this.new = this.new.bind(this);
+    // this function creates a Value, but it's useful for records
+    // for tuples, see "new"
+    this.newValue = this.newValue.bind(this);
     this.show = this.show.bind(this);
     this.name = name1;
     this.type = type1;
@@ -253,6 +261,47 @@ var Constructor = exports.Constructor = function () {
 
         for (var _len = arguments.length, vals = Array(_len), _key = 0; _key < _len; _key++) {
           vals[_key] = arguments[_key];
+        }
+
+        for (i = j = 0, ref = this.vars.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+          //console.log "Processing " + @vars[i].show()
+          //console.dir vals[i]
+          v = vals[i];
+          if (v != null) {
+            t = this.vars[i].type; // t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
+            if (t instanceof TypeVar) {
+              console.log("new Value creation - Partially implemented");
+              // 1. need to check type constrains (type classes etc), now NOT implemented
+              // 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
+              // 3. set the value to value
+              val[this.vars[i].name] = v;
+            } else {
+              if (t.equals(Type.checkType(v))) {
+                // are the types ok? doesnt work for polymorphic yet!!!
+                val[this.vars[i].name] = v;
+              } else {
+                throw "Type mismatch in assignment!";
+              }
+            }
+          }
+        }
+        return val;
+      }
+    }
+  }, {
+    key: "newValue",
+    value: function newValue() {
+      var i, j, ref, t, v, val;
+      //console.log "Calling new!"
+      //console.dir vals
+      if (this.vars.length === 0) {
+        return new Value(this.name, this.type); // empty constructor is easy
+      } else {
+        //console.log "Compound constructor"
+        val = new Value(this.name, this.type);
+
+        for (var _len2 = arguments.length, vals = Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+          vals[_key2] = arguments[_key2];
         }
 
         for (i = j = 0, ref = this.vars.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
@@ -328,8 +377,8 @@ var Type = exports.Type = function () {
     }();
     // adding constructors
 
-    for (var _len2 = arguments.length, constructors = Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
-      constructors[_key2 - 1] = arguments[_key2];
+    for (var _len3 = arguments.length, constructors = Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
+      constructors[_key3 - 1] = arguments[_key3];
     }
 
     for (j = 0, len = constructors.length; j < len; j++) {
@@ -534,8 +583,8 @@ var Func = exports.Func = function () {
     this.functions = {};
     this.vars = [];
 
-    for (var _len3 = arguments.length, varTypes = Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
-      varTypes[_key3 - 1] = arguments[_key3];
+    for (var _len4 = arguments.length, varTypes = Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
+      varTypes[_key4 - 1] = arguments[_key4];
     }
 
     for (i = j = 0, ref = varTypes.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
@@ -602,9 +651,30 @@ f1.match("S", function (x) {
 
 toInt = f1.ap;
 
+// the below works, so we *can* pattern match quite nicely
+// problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
+ttf = function ttf(_ref) {
+  var x = _ref.x,
+      y = _ref.y;
+
+  console.log("testing destructuring assignment");
+  console.dir(arguments);
+  return console.log(x, y);
+};
+
+tta = function tta(_ref2) {
+  var _ref3 = _slicedToArray(_ref2, 2),
+      x = _ref3[0],
+      y = _ref3[1];
+
+  console.log("testing array destructuring assignment");
+  console.dir(arguments);
+  return console.log(x, y);
+};
+
 // different test runs
 runTests = function runTests() {
-  var j1, j2, j3, two, y0, y1;
+  var j1, j2, j3, ttfa, two, y0, y1;
   two = S(S(S(S(Z()))));
   console.log(Z().show());
   console.log(two.show());
@@ -619,7 +689,13 @@ runTests = function runTests() {
   j3 = Just(two);
   console.log(j1.show());
   console.log(j2.show());
-  return console.log(j3.show());
+  console.log(j3.show());
+  ttfa = {
+    x: 1,
+    y: "hello"
+  };
+  ttf(ttfa);
+  return tta([10, two]);
 };
 
 runTests();

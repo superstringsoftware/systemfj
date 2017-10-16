@@ -26,6 +26,7 @@ export class Var extends Variable
   show: => @name + " :: " + @type.name
 
 # class for holding values - basically, a record. Do we even need a class here?
+# current thinking is - turn this into a record, tuples will be handled as a simple array (see Constructor)
 export class Value
   # pass in constructorTag and reference to type, add value fields as needed
   # for now passing reference to Type, ideally need to do all type checking via
@@ -82,6 +83,34 @@ export class Constructor
   Alternative approach: maybe more lightweight, use generic constructor function, but use some sort of specific type annotations.
   ###
   new: (vals...) =>
+    #console.log "Calling new!"
+    #console.dir vals
+    if @vars.length is 0
+      new Value @name, @type # empty constructor is easy
+    else
+      #console.log "Compound constructor"
+      val = new Value @name, @type
+      for i in [0...@vars.length]
+        #console.log "Processing " + @vars[i].show()
+        #console.dir vals[i]
+        v = vals[i] # is there a value number i?
+        if v?
+          t = @vars[i].type # t can be TypeVar (in polymorphic constructors) or a concrete Type, need to handle separately
+          if (t instanceof TypeVar)
+            console.log "new Value creation - Partially implemented"
+            # 1. need to check type constrains (type classes etc), now NOT implemented
+            # 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
+            # 3. set the value to value
+            val[@vars[i].name] = v
+          else
+            if t.equals Type.checkType v # are the types ok? doesnt work for polymorphic yet!!!
+              val[@vars[i].name] = v
+            else throw "Type mismatch in assignment!"
+      val
+
+  # this function creates a Value, but it's useful for records
+  # for tuples, see "new"
+  newValue: (vals...) =>
     #console.log "Calling new!"
     #console.dir vals
     if @vars.length is 0
@@ -280,6 +309,17 @@ f1.match "Z", -> 0
 f1.match "S", (x) -> 1 + f1.ap x['0'] # this pattern matching works for 0th element of S constructor - how do we make it a better syntax???
 toInt = f1.ap
 
+# the below works, so we *can* pattern match quite nicely
+# problem is, we can match records like this but not tuples - since it has a structure {'0':..., '1':...} etc
+ttf = ({x, y}) ->
+  console.log "testing destructuring assignment"
+  console.dir arguments
+  console.log x, y
+
+tta = ([x, y]) ->
+  console.log "testing array destructuring assignment"
+  console.dir arguments
+  console.log x, y
 
 # different test runs
 runTests = ->
@@ -299,6 +339,11 @@ runTests = ->
   console.log j1.show()
   console.log j2.show()
   console.log j3.show()
+
+  ttfa = {x: 1, y:"hello"}
+  ttf ttfa
+
+  tta [10, two]
 
 
 
