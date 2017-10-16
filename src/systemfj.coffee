@@ -152,7 +152,7 @@ export class Constructor
 export class Type
   # create a new type with name and type variables (no regular vars as no dependent types yet)
   # e.g. Maybe = new Type "Maybe a"
-  constructor: (type, constructors...)->
+  constructor: (type, constructors)->
     @constructors = {}
     xs = type.split(' ');
     @name = xs[0]
@@ -160,6 +160,10 @@ export class Type
     @vars = (new TypeVar xs[i], -1 for i in [1...xs.length])
     @add cons for cons in constructors # adding constructors
     Type[@name] = this # adding this type to the list of all types
+
+  # static function to add a new type - potentially we may not want to construct new types directly
+  @new: (type, args...) -> new Type type, args
+
 
   # comparing 2 types, for now very basic (simply name)
   equals: (type)=> @name is type.name
@@ -193,6 +197,7 @@ export class Type
     cons = new Constructor name, this, vars
     @constructors[cons.name] = cons # adding constructor to the list of constructors
     @[cons.name] = cons.new # adding "new" generating function as a constructor name - for cleaner syntax! (Nat.Z is a function call instead of Nat.Z.new)
+    global[cons.name] = cons.new # putting constructor function to the global namespace - IS IT EVEN A GOOD APPROACH??
     #export cons.new as cons.name
     #@[cons.name].bind cons # binding this to newly created constructor
 
@@ -274,37 +279,33 @@ show = (val, top_level = true)=>
 ###
 # some built in types --------------------------------------------------------------
 ###
-TOP = new Type "_TOP_" # top type of all types - for the future subtyping?
-BOTTOM = new Type "_BOTTOM_" # _|_ in Haskell
-EMPTY = new Type "_EMPTY_" # () in Haskell
-UNIT = new Type "_UNIT_", "Unit" # type with a single element
-FUNCTION = new Type "FUNCTION" # placeholder for all functions, eventually needs to be replaced with proper (a -> b) signatures
+Type.new "_TOP_" # top type of all types - for the future subtyping?
+Type.new "_BOTTOM_" # _|_ in Haskell
+Type.new "_EMPTY_" # () in Haskell
+Type.new "_UNIT_", "Unit" # type with a single element
+Type.new "FUNCTION" # placeholder for all functions, eventually needs to be replaced with proper (a -> b) signatures
 # exposing constructors for cleaner syntax
-Unit = UNIT.Unit
+# Unit = UNIT.Unit
 
 #console.log Unit().show()
 
 # primitive types (substituted into js types directly)
-JInt = new Type "Int", "I#"
-JFloat = new Type "Float", "F#"
-JString = new Type "String", "S#"
-JBool = new Type "Bool", "B#"
+Type.new "Int", "I#"
+Type.new "Float", "F#"
+Type.new "String", "S#"
+Type.new "Bool", "B#"
 
 T = Type # alias for global types, so that we can write things like T.Int
 
 # some standard types - exposing constructors right away
 # THIS SHOULD GO TO Type creation function - just add the names to Exports!!!
-export Pair = (new Type "Pair a b", "Pair a b").Pair
-#p = Pair 1, 2
-export Left = (new Type "Either a b", "Left a", "Right b").Left
-export Right = Type.Either.Right
-export Just = (new Type "Maybe a", "Just a", "Nothing").Just
-export Nothing = Type.Maybe.Nothing
-export Cell = (new Type "List a", "Cell a List", "Nil").Cell
-export Nil = Type.List.Nil
+Type.new "Pair a b", "Pair a b"
+Type.new "Either a b", "Left a", "Right b"
+Type.new "Maybe a", "Just a", "Nothing"
 
-export Z = (new Type "Nat", "Z", "S Nat").Z
-export S = Type.Nat.S
+Type.new "List a", "Cell a List", "Nil"
+
+Type.new "Nat", "Z", "S Nat"
 
 # our functional function with pattern matching and type checking and polymorphism
 export class Func
@@ -398,7 +399,7 @@ toInt = new Func "toInt", Type.Nat, Type.Int
 # complex type and some functions, loosely following Haskell interface
 # in Haskell, Complex is actually a type constructor: data Complex a
 # we only have quick and dirty Float implementation
-export Complex = (new Type "Complex", "Complex Float Float").Complex
+Type.new "Complex", "Complex Float Float"
 
 realPart = new Func "realPart", Type.Complex, Type.Float
   .match "Complex", ([x]) -> x

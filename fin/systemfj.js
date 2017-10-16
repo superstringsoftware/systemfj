@@ -21,17 +21,7 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 //require "babel-register"
 
 // base class shouldnt be used directly
-var BOTTOM,
-    EMPTY,
-    FUNCTION,
-    JBool,
-    JFloat,
-    JInt,
-    JString,
-    T,
-    TOP,
-    UNIT,
-    Unit,
+var T,
     id,
     imagPart,
     isZero,
@@ -358,11 +348,10 @@ var Constructor = exports.Constructor = function () {
 var Type = exports.Type = function () {
   // create a new type with name and type variables (no regular vars as no dependent types yet)
   // e.g. Maybe = new Type "Maybe a"
-  function Type(type) {
+  function Type(type, constructors) {
     _classCallCheck(this, Type);
 
     var cons, i, j, len, xs;
-
     // comparing 2 types, for now very basic (simply name)
     this.equals = this.equals.bind(this);
     // adding a new constructor to this type in the same format as Type constructor,
@@ -383,17 +372,15 @@ var Type = exports.Type = function () {
       return results;
     }();
     // adding constructors
-
-    for (var _len3 = arguments.length, constructors = Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
-      constructors[_key3 - 1] = arguments[_key3];
-    }
-
     for (j = 0, len = constructors.length; j < len; j++) {
       cons = constructors[j];
       this.add(cons);
     }
     Type[this.name] = this; // adding this type to the list of all types
   }
+
+  // static function to add a new type - potentially we may not want to construct new types directly
+
 
   _createClass(Type, [{
     key: "equals",
@@ -434,7 +421,8 @@ var Type = exports.Type = function () {
       }
       cons = new Constructor(name, this, vars);
       this.constructors[cons.name] = cons; // adding constructor to the list of constructors
-      return this[cons.name] = cons.new; // adding "new" generating function as a constructor name - for cleaner syntax! (Nat.Z is a function call instead of Nat.Z.new)
+      this[cons.name] = cons.new; // adding "new" generating function as a constructor name - for cleaner syntax! (Nat.Z is a function call instead of Nat.Z.new)
+      return global[cons.name] = cons.new; // putting constructor function to the global namespace - IS IT EVEN A GOOD APPROACH??
     }
 
     //export cons.new as cons.name
@@ -476,6 +464,15 @@ var Type = exports.Type = function () {
     // returns array of all types pretty printed as Strings
 
   }], [{
+    key: "new",
+    value: function _new(type) {
+      for (var _len3 = arguments.length, args = Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
+        args[_key3 - 1] = arguments[_key3];
+      }
+
+      return new Type(type, args);
+    }
+  }, {
     key: "isTuple",
     value: function isTuple(v) {
       return v instanceof Array && v[v.length - 1] instanceof Type;
@@ -582,53 +579,44 @@ _show = function show(val) {
 /*
  * some built in types --------------------------------------------------------------
  */
-TOP = new Type("_TOP_"); // top type of all types - for the future subtyping?
+Type.new("_TOP_"); // top type of all types - for the future subtyping?
 
-BOTTOM = new Type("_BOTTOM_"); // _|_ in Haskell
+Type.new("_BOTTOM_"); // _|_ in Haskell
 
-EMPTY = new Type("_EMPTY_"); // () in Haskell
+Type.new("_EMPTY_"); // () in Haskell
 
-UNIT = new Type("_UNIT_", "Unit"); // type with a single element
+Type.new("_UNIT_", "Unit"); // type with a single element
 
-FUNCTION = new Type("FUNCTION"); // placeholder for all functions, eventually needs to be replaced with proper (a -> b) signatures
+Type.new("FUNCTION"); // placeholder for all functions, eventually needs to be replaced with proper (a -> b) signatures
 
 // exposing constructors for cleaner syntax
-Unit = UNIT.Unit;
+// Unit = UNIT.Unit
 
 //console.log Unit().show()
 
 // primitive types (substituted into js types directly)
-JInt = new Type("Int", "I#");
+Type.new("Int", "I#");
 
-JFloat = new Type("Float", "F#");
+Type.new("Float", "F#");
 
-JString = new Type("String", "S#");
+Type.new("String", "S#");
 
-JBool = new Type("Bool", "B#");
+Type.new("Bool", "B#");
 
 T = Type; // alias for global types, so that we can write things like T.Int
 
 
 // some standard types - exposing constructors right away
 // THIS SHOULD GO TO Type creation function - just add the names to Exports!!!
-var Pair = exports.Pair = new Type("Pair a b", "Pair a b").Pair;
+Type.new("Pair a b", "Pair a b");
 
-//p = Pair 1, 2
-var Left = exports.Left = new Type("Either a b", "Left a", "Right b").Left;
+Type.new("Either a b", "Left a", "Right b");
 
-var Right = exports.Right = Type.Either.Right;
+Type.new("Maybe a", "Just a", "Nothing");
 
-var Just = exports.Just = new Type("Maybe a", "Just a", "Nothing").Just;
+Type.new("List a", "Cell a List", "Nil");
 
-var Nothing = exports.Nothing = Type.Maybe.Nothing;
-
-var Cell = exports.Cell = new Type("List a", "Cell a List", "Nil").Cell;
-
-var Nil = exports.Nil = Type.List.Nil;
-
-var Z = exports.Z = new Type("Nat", "Z", "S Nat").Z;
-
-var S = exports.S = Type.Nat.S;
+Type.new("Nat", "Z", "S Nat");
 
 // our functional function with pattern matching and type checking and polymorphism
 var Func = exports.Func = function () {
@@ -797,7 +785,7 @@ toInt = new Func("toInt", Type.Nat, Type.Int).match("Z", function () {
 // complex type and some functions, loosely following Haskell interface
 // in Haskell, Complex is actually a type constructor: data Complex a
 // we only have quick and dirty Float implementation
-var Complex = exports.Complex = new Type("Complex", "Complex Float Float").Complex;
+Type.new("Complex", "Complex Float Float");
 
 realPart = new Func("realPart", Type.Complex, Type.Float).match("Complex", function (_ref3) {
   var _ref4 = _slicedToArray(_ref3, 1),

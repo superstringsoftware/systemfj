@@ -2,8 +2,6 @@ import {Type, Constructor, Value, Func, Var, TypeVar, show} from './systemfj'
 import {S, Z} from './base'
 
 # Some tests #################################################
-T = Type
-tCustom = new Type "Custom", "Cons Float String"
 
 #console.log t for t in Type.showAllTypes()
 
