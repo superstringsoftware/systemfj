@@ -31,6 +31,7 @@ var T,
     realPart,
     runTests,
     _show,
+    testF,
     toInt,
     boundMethodCheck = function boundMethodCheck(instance, Constructor) {
   if (!(instance instanceof Constructor)) {
@@ -71,6 +72,7 @@ var TypeVar = exports.TypeVar = function (_Variable) {
 
     _this.show = _this.show.bind(_this);
     _this.shortShow = _this.shortShow.bind(_this);
+    _this.clone = _this.clone.bind(_this);
     return _this;
   }
 
@@ -96,6 +98,12 @@ var TypeVar = exports.TypeVar = function (_Variable) {
       boundMethodCheck(this, TypeVar);
       return this.name;
     }
+  }, {
+    key: "clone",
+    value: function clone() {
+      boundMethodCheck(this, TypeVar);
+      return new TypeVar(this.name, this.boundTo);
+    }
   }]);
 
   return TypeVar;
@@ -110,6 +118,7 @@ var Var = exports.Var = function (_Variable2) {
     var _this2 = _possibleConstructorReturn(this, (Var.__proto__ || Object.getPrototypeOf(Var)).call(this, name, boundTo));
 
     _this2.show = _this2.show.bind(_this2);
+    _this2.clone = _this2.clone.bind(_this2);
     _this2.type = type;
     return _this2;
   }
@@ -130,6 +139,15 @@ var Var = exports.Var = function (_Variable2) {
       // used for regular variables
       boundMethodCheck(this, Var);
       return this.name + " :: " + this.type.name;
+    }
+  }, {
+    key: "clone",
+    value: function clone() {
+      var v;
+      boundMethodCheck(this, Var);
+      v = new Var(this.name, this.boundTo);
+      v.type = this.type instanceof TypeVar ? this.type.clone() : this.type;
+      return v;
     }
   }]);
 
@@ -283,6 +301,7 @@ var Constructor = exports.Constructor = function () {
       }
       val.push(this.name);
       val.push(this.type);
+      Object.freeze(val); // pure & immutable should we be
       return val;
     }
   }, {
@@ -291,12 +310,8 @@ var Constructor = exports.Constructor = function () {
       var i, j, ref, t, v, val;
       //console.log "Calling new!"
       //console.dir vals
-      if (this.vars.length === 0) {
-        return new Value(this.name, this.type); // empty constructor is easy
-      } else {
-        //console.log "Compound constructor"
-        val = new Value(this.name, this.type);
-
+      val = new Value(this.name, this.type);
+      if (this.vars.length > 0) {
         for (var _len2 = arguments.length, vals = Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
           vals[_key2] = arguments[_key2];
         }
@@ -630,6 +645,9 @@ var Func = exports.Func = function () {
     //console.log "Created function " + @name + " with arguments:"
     //console.log @vars
 
+    // internal function needed for creating new function based on this
+    // when doing partial application without screwing original function signature
+    this._clone = this._clone.bind(this);
     // adding a default pattern match
     this.default = this.default.bind(this);
     // single argument call
@@ -649,8 +667,9 @@ var Func = exports.Func = function () {
     this.ap = this.ap.bind(this);
     this.show = this.show.bind(this);
     this.name = name1;
-    this.functions = {};
-    this.vars = [];
+    this.functions = {}; // functions against which we pattern match
+    this.vars = []; // variables that this function accepts
+    this.vals = []; // array of values to handle partial application
 
     for (var _len4 = arguments.length, varTypes = Array(_len4 > 1 ? _len4 - 1 : 0), _key4 = 1; _key4 < _len4; _key4++) {
       varTypes[_key4 - 1] = arguments[_key4];
@@ -668,6 +687,28 @@ var Func = exports.Func = function () {
   }
 
   _createClass(Func, [{
+    key: "_clone",
+    value: function _clone() {
+      var f, v;
+      f = new Func(this.name);
+      f.returnType = this.returnType;
+      f.fdef = this.fdef;
+      f.functions = this.functions;
+      f.vars = function () {
+        var j, len, ref, results;
+        ref = this.vars;
+        // deep cloning vars - do we need to?
+        results = [];
+        for (j = 0, len = ref.length; j < len; j++) {
+          v = ref[j];
+          results.push(v.clone());
+        }
+        return results;
+      }.call(this);
+      f.vals = this.vals.slice(0); // shallow cloning vals
+      return f;
+    }
+  }, {
     key: "default",
     value: function _default(func) {
       this.functions["__DEFAULT__"] = func;
@@ -714,27 +755,41 @@ var Func = exports.Func = function () {
   }, {
     key: "ap",
     value: function ap() {
-      var f, j, len, pat, v;
+      var allVals, f, j, k, len, len1, pat, v;
       //console.log "Calling function " + @name + " with args:"
       //console.log vals
-      pat = ""; // building a pattern first
 
       for (var _len5 = arguments.length, vals = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
         vals[_key5] = arguments[_key5];
       }
 
-      for (j = 0, len = vals.length; j < len; j++) {
-        v = vals[j];
-        pat += Type.checkConstructor(v);
-      }
-      //console.log "Pattern in pattern application: " + pat
-      // pattern matching first
-      f = this.functions[pat];
-      // calling matched function with the argument
-      if (f != null) {
-        return f.apply(this, vals);
+      if (vals.length < this.vars.length) {
+        // partial application - cloning our function object, memoizing variables and values
+        //console.log "Partial application in " + @name
+        f = this._clone();
+        // adding given values to memoized
+        for (j = 0, len = vals.length; j < len; j++) {
+          v = vals[j];
+          f.vals.push(v);
+        }
+        f.vars = f.vars.slice(vals.length); // cutting remaining vars array
+        return f.ap;
       } else {
-        return this.fdef.apply(this, vals);
+        allVals = this.vals.concat(vals);
+        pat = ""; // building a pattern first
+        for (k = 0, len1 = allVals.length; k < len1; k++) {
+          v = allVals[k];
+          pat += Type.checkConstructor(v);
+        }
+        //console.log "Pattern in pattern application: " + pat + " in " + @name
+        // pattern matching first
+        f = this.functions[pat];
+        // calling matched function with the argument
+        if (f != null) {
+          return f.apply(this, allVals);
+        } else {
+          return this.fdef.apply(this, allVals);
+        }
       }
     }
   }, {
@@ -832,9 +887,13 @@ map = new Func("map", Type.FUNCTION, Type.List, Type.List).match(["Function", "N
   return Cell(f(x), map(f, tail));
 }).ap;
 
+testF = new Func("testF", Type.Float, Type.Float, Type.Float).match(["Float", "Float"], function (x, y) {
+  return x * y;
+}).ap;
+
 // different test runs
 runTests = function runTests() {
-  var c1, j1, j2, j3, l, m, two, y0, y1;
+  var c1, j1, j2, j3, l, m, testF4, testF7, two, y0, y1;
   two = S(S(S(S(Z()))));
   console.log(_show(Z())); //.show()
   console.log(_show(two)); //.show()
@@ -866,7 +925,15 @@ runTests = function runTests() {
   m = map(function (x) {
     return x * 2;
   }, l);
-  return console.log(_show(m));
+  console.log(_show(m));
+  console.log("Testing partial application");
+  console.log(testF(4, 7));
+  testF4 = testF(4);
+  testF7 = testF(7);
+  console.log(testF4(7));
+  console.log(testF7(4));
+  console.log(testF7(7));
+  return console.log(testF(1, 2));
 };
 
 runTests();

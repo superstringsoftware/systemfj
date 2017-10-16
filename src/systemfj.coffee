@@ -15,6 +15,7 @@ export class TypeVar extends Variable
   bind: (val) -> throw "TypeVar::bind() not implemented yet"
   show: => @name + " :: " + "Type"
   shortShow: => @name
+  clone: => new TypeVar @name, @boundTo
 
 # used for regular variables
 export class Var extends Variable
@@ -24,6 +25,11 @@ export class Var extends Variable
   type: -> @type # should return Type that our variable indexes - can be either TypeVar OR specific type
   bind: (val) -> throw "Var::bind() not implemented yet"
   show: => @name + " :: " + @type.name
+  clone: =>
+    v = new Var @name, @boundTo
+    v.type = if (@type instanceof TypeVar) then @type.clone() else @type
+    v
+
 
 # class for holding values - basically, a record. Do we even need a class here?
 # current thinking is - turn this into a record, tuples will be handled as a simple array (see Constructor)
@@ -111,6 +117,7 @@ export class Constructor
           else throw "Type mismatch in assignment!"
     val.push @name
     val.push @type
+    Object.freeze val # pure & immutable should we be
     val
 
   # this function creates a Value, but it's useful for records
@@ -118,11 +125,8 @@ export class Constructor
   newValue: (vals...) =>
     #console.log "Calling new!"
     #console.dir vals
-    if @vars.length is 0
-      new Value @name, @type # empty constructor is easy
-    else
-      #console.log "Compound constructor"
-      val = new Value @name, @type
+    val = new Value @name, @type
+    if @vars.length > 0
       for i in [0...@vars.length]
         #console.log "Processing " + @vars[i].show()
         #console.dir vals[i]
@@ -311,8 +315,9 @@ Type.new "Nat", "Z", "S Nat"
 export class Func
   # creating a function with specific types. Last one in the list should be return type!!!
   constructor: (@name, varTypes...) ->
-    @functions = {}
-    @vars = []
+    @functions = {} # functions against which we pattern match
+    @vars = [] # variables that this function accepts
+    @vals = [] # array of values to handle partial application
     @returnType = varTypes.pop()
     for i in [0...varTypes.length]
       @vars.push new Var i.toString(), -1, varTypes[i]
@@ -321,6 +326,17 @@ export class Func
     @fdef = @functions["__DEFAULT__"]
     #console.log "Created function " + @name + " with arguments:"
     #console.log @vars
+
+  # internal function needed for creating new function based on this
+  # when doing partial application without screwing original function signature
+  _clone: =>
+    f = new Func @name
+    f.returnType = @returnType
+    f.fdef = @fdef
+    f.functions = @functions
+    f.vars = (v.clone() for v in @vars) # deep cloning vars - do we need to?
+    f.vals = @vals.slice 0 # shallow cloning vals
+    f
 
   # adding a default pattern match
   default: (func) => @functions["__DEFAULT__"] = func; @fdef = func
@@ -359,13 +375,22 @@ export class Func
   ap: (vals...) =>
     #console.log "Calling function " + @name + " with args:"
     #console.log vals
-    pat = "" # building a pattern first
-    pat += Type.checkConstructor v for v in vals
-    #console.log "Pattern in pattern application: " + pat
-    # pattern matching first
-    f = @functions[pat]
-    # calling matched function with the argument
-    if f? then f.apply @, vals else @fdef.apply @, vals
+    if vals.length < @vars.length
+      # partial application - cloning our function object, memoizing variables and values
+      #console.log "Partial application in " + @name
+      f = @_clone()
+      f.vals.push v for v in vals # adding given values to memoized
+      f.vars = f.vars.slice vals.length # cutting remaining vars array
+      f.ap
+    else
+      allVals = @vals.concat vals
+      pat = "" # building a pattern first
+      pat += Type.checkConstructor v for v in allVals
+      #console.log "Pattern in pattern application: " + pat + " in " + @name
+      # pattern matching first
+      f = @functions[pat]
+      # calling matched function with the argument
+      if f? then f.apply @, allVals else @fdef.apply @, allVals
 
   show: =>
     ret = @name + " :: "
@@ -425,6 +450,10 @@ map = new Func "map", Type.FUNCTION, Type.List, Type.List
   .match ["Function", "Cell"], (f, [x, tail]) -> Cell (f x), (map f, tail)
   .ap
 
+testF = new Func "testF", Type.Float, Type.Float, Type.Float
+  .match ["Float", "Float"], (x,y) -> x * y
+  .ap
+
 
 # different test runs
 runTests = ->
@@ -463,6 +492,14 @@ runTests = ->
   m = map ((x)->x*2), l
   console.log show m
 
+  console.log "Testing partial application"
+  console.log testF 4, 7
+  testF4 = testF 4
+  testF7 = testF 7
+  console.log testF4 7
+  console.log testF7 4
+  console.log testF7 7
+  console.log testF 1, 2
 
 
 
