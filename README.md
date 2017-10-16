@@ -78,6 +78,7 @@ console.log show map ((x)->x*2), list
 
 ## Roadmap
 * Better basic type-checking
+* Base library similar to Haskell Prelude to make it useful
 * Cleaner separation of pure vs side-effect functions
 * Haskell Typeclasses are the next big thing to turn SystemFJ into something powerful and useful, since it allows for some great ad-hoc polymorphism
 * Records - also quite straightforward, more a question of syntax design
