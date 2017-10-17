@@ -394,7 +394,7 @@ export class Func
       f = @_clone()
       f.vals.push v for v in vals # adding given values to memoized
       f.vars = f.vars.slice vals.length # cutting remaining vars array
-      f.ap
+      f.ap 
     else
       allVals = @vals.concat vals
       pat = "" # building a pattern first
@@ -583,8 +583,8 @@ runTests = ->
   console.log "Head and tail"
   console.log head testL
   console.log tail testL
-  xxxxx = fromArray {head: 2}, new Var
-  console.log xxxxx
+  #xxxxx = fromArray {head: 2}, new Var
+  #console.log xxxxx
 
   #f10 Var
 

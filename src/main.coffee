@@ -1,4 +1,4 @@
-import {Type, Constructor, Value, Func, Var, TypeVar, show} from './systemfj'
+import * as SFJ from './systemfj-v2'
 #import {S, Z} from './base'
 
 # Some tests #################################################

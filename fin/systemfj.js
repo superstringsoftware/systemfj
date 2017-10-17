@@ -760,7 +760,7 @@ f10 = function f10() {
 };
 
 runTests = function runTests() {
-  var c1, j1, j2, j3, l, m, testF4, testF47, testL, two, x1, x2, xxxxx, y0, y1;
+  var c1, j1, j2, j3, l, m, testF4, testF47, testL, two, x1, x2, y0, y1;
   two = S(S(S(S(Z()))));
   console.log(show(Z()));
   console.log(show(two));
@@ -810,11 +810,7 @@ runTests = function runTests() {
   console.dir(testL);
   console.log("Head and tail");
   console.log(head(testL));
-  console.log(tail(testL));
-  xxxxx = fromArray({
-    head: 2
-  }, new Var());
-  return console.log(xxxxx);
+  return console.log(tail(testL));
 };
 
 runTests();
