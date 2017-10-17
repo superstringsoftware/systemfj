@@ -1,5 +1,5 @@
 import {Type, Constructor, Value, Func, Var, TypeVar, show} from './systemfj'
-import {S, Z} from './base'
+#import {S, Z} from './base'
 
 # Some tests #################################################
 

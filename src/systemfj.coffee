@@ -1,5 +1,5 @@
 #import "babel-register"
-#require "babel-register"
+require "babel-register"
 
 # base class shouldnt be used directly
 export class Variable
@@ -110,9 +110,11 @@ export class Constructor
           # 1. need to check type constrains (type classes etc), now NOT implemented
           # 2. need to set the TypeVar to the type of the current val - somewhere on Value, now NOT implemented
           # 3. set the value to value
+          Object.freeze v
           val.push v
         else
           if t.equals Type.checkType v # are the types ok? doesnt work for polymorphic yet!!!
+            Object.freeze v
             val.push v
           else throw "Type mismatch in assignment!"
     val.push @name
@@ -170,7 +172,7 @@ export class Type
 
 
   # comparing 2 types, for now very basic (simply name)
-  equals: (type)=> @name is type.name
+  equals: (type) => if (type instanceof Type) then @name is type.name else @name is type
 
   # adding a new constructor to this type in the same format as Type constructor,
   # e.g. "Just a" or "MyPair Int Float"
@@ -212,17 +214,18 @@ export class Type
 
   # helper function that returns name of the type *even if v is not Value* but a primitive type
   @checkType: (v) ->
-    if (v instanceof Value)
-      v._type_
+    if (v instanceof Value) then v._type_
+    if Type.isTuple v then v[v.length-1]
     else
-      if Type.isTuple v # checking if it's a tuple
-        v[v.length-1]
-      else
-        switch (typeof v)
-          when "string" then Type.String
-          when "number" then Type.Float
-          when "boolean" then Type.Bool
-          else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
+      switch (typeof v)
+        when "string" then Type.String
+        when "number" then Type.Float
+        when "boolean" then Type.Bool
+        when "function" then Type.FUNCTION # ok, this is actually not good, since pattern matching won't work with curried functions this way
+        when "object"  # finding the name of the constructor for a standard JS object - useful for defining generic pattern matched functions
+          s = v.constructor.toString()
+          ret = s.substring (s.indexOf ' ') + 1, (s.indexOf '(')
+        else throw "We got an unboxed value of type " + (typeof v) + " while checking type -- shouldn't happen!"
 
   # this is a key function - used in function pattern matching etc
   @checkConstructor: (v) ->
@@ -237,7 +240,7 @@ export class Type
         when "object"  # finding the name of the constructor for a standard JS object - useful for defining generic pattern matched functions
           s = v.constructor.toString()
           s.substring (s.indexOf ' ') + 1, (s.indexOf '(')
-        else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
+        else throw "We got an unboxed value of type " + (typeof v) + " while checking Constructor -- shouldn't happen!"
 
   shortShow: (inside = false)=>
     ret = if (@vars.length > 0) and inside then "(" + @name else @name
@@ -300,6 +303,7 @@ Type.new "Int", "I#"
 Type.new "Float", "F#"
 Type.new "String", "S#"
 Type.new "Bool", "B#"
+Type.new "Array", "A#" # built-in javascript array - used for implementing boxed List type (vs purely functional Cell x xs we have below)
 
 T = Type # alias for global types, so that we can write things like T.Int
 
@@ -433,6 +437,19 @@ export class TypeClass
       @vars.push new Var i.toString(), -1, varTypes[i]
 
 
+###
+# Built in List type --------------------------------------------------------------
+# type used to implement List behaviour using immutable JS Arrays as an underlying data representation
+###
+Type.new "JList a", "JList Array"
+
+head = new Func "head"
+  .match "JList", ([l]) -> l[0]
+  .ap
+
+tail = new Func "tail", Type.JList, Type.JList
+  .match "JList", ([l]) -> JList l.slice 1
+  .ap
 
 ###
 SOME STANDARD FUNCTIONS --------------------------------------------------------------
@@ -483,10 +500,14 @@ map = new Func "map", Type.FUNCTION, Type.List, Type.List
   .match ["Function", "Cell"], (f, [x, tail]) -> Cell (f x), (map f, tail)
   .ap
 
+# used for testing partial application - testF4 = testF 4 - returns a function
 testF = new Func "testF", Type.Float, Type.Float, Type.Float, Type.Float
   .match ["Float", "Float", "Float"], (x,y,z) -> x * y + z
   .ap
 
+f10 = ->
+  console.dir arguments[0].toString()
+  console.dir Type.checkConstructor arguments[0]
 
 # different test runs
 runTests = ->
@@ -540,6 +561,16 @@ runTests = ->
   x2 = new Type "Hello", "Hello"
   console.log Type.checkConstructor x1
   console.log Type.checkConstructor x2
+
+  console.log "Testing built in lists"
+  testL = JList [1,3,4,10,12]
+  console.dir testL
+  console.log "Head and tail"
+  console.log head testL
+  console.log tail testL
+
+  f10 Var
+
 
 
 
