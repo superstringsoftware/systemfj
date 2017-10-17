@@ -524,9 +524,7 @@ var Type = exports.Type = function () {
   }, {
     key: "checkConstructor",
     value: function checkConstructor(v) {
-      if (v === _) {
-        _;
-      }
+      var s;
       if (v instanceof Value) {
         v._constructorTag_;
       }
@@ -542,6 +540,10 @@ var Type = exports.Type = function () {
             return "Bool";
           case "function":
             return "Function"; // ok, this is actually not good, since pattern matching won't work with curried functions this way
+          case "object":
+            // finding the name of the constructor for a standard JS object - useful for defining generic pattern matched functions
+            s = v.constructor.toString();
+            return s.substring(s.indexOf(' ') + 1, s.indexOf('('));
           default:
             throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " -- shouldn't happen!";
         }
@@ -633,6 +635,9 @@ Type.new("List a", "Cell a List", "Nil");
 
 Type.new("Nat", "Z", "S Nat");
 
+/*
+FUNCTION CLASS with pattern matching and partial application  --------------------------------------------------------------
+*/
 // our functional function with pattern matching and type checking and polymorphism
 var Func = exports.Func = function () {
   // creating a function with specific types. Last one in the list should be return type!!!
@@ -814,7 +819,41 @@ var Func = exports.Func = function () {
 
 var _ = exports._ = "__ANY_PATTERN_MATCH__"; // exporting _ for empty pattern matches
 
+/*
+TYPE CLASSES --------------------------------------------------------------
 
+e.g.: - signature definition
+class Show a where
+  show :: a -> String
+
+adding implementation to the dictionary indexed by 'a':
+instance Show MyType where
+  show (MyTypeCons x) = toString x
+
+then, when show is called on a value of some type we check the type, find
+the corresponding function in the dictionary and call it
+*/
+var TypeClass = exports.TypeClass = function TypeClass(name1) {
+  _classCallCheck(this, TypeClass);
+
+  var i, j, ref;
+  this.name = name1;
+  this.functions = {}; // functions against which we pattern match
+  this.vars = []; // variables that this function accepts
+
+  for (var _len6 = arguments.length, varTypes = Array(_len6 > 1 ? _len6 - 1 : 0), _key6 = 1; _key6 < _len6; _key6++) {
+    varTypes[_key6 - 1] = arguments[_key6];
+  }
+
+  this.returnType = varTypes.pop();
+  for (i = j = 0, ref = varTypes.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+    this.vars.push(new Var(i.toString(), -1, varTypes[i]));
+  }
+};
+
+/*
+SOME STANDARD FUNCTIONS --------------------------------------------------------------
+*/
 // id - checking "default" functionality and polymorphic functions
 // for now, works in terms of default but there's no polymorphic type checks etc
 id = new Func("id").match(function (x) {
@@ -893,7 +932,7 @@ testF = new Func("testF", Type.Float, Type.Float, Type.Float, Type.Float).match(
 
 // different test runs
 runTests = function runTests() {
-  var c1, j1, j2, j3, l, m, testF4, testF47, two, y0, y1;
+  var c1, j1, j2, j3, l, m, testF4, testF47, two, x1, x2, y0, y1;
   two = S(S(S(S(Z()))));
   console.log(_show(Z())); //.show()
   console.log(_show(two)); //.show()
@@ -933,7 +972,13 @@ runTests = function runTests() {
   console.log(testF4(7, 2));
   console.log(testF47(2));
   //console.log testF7 7
-  return console.log(testF(1, 2, 0));
+  console.log(testF(1, 2, 0));
+  console.log("Testing constructors");
+  console.log(Type.checkConstructor(two));
+  x1 = new Var();
+  x2 = new Type("Hello", "Hello");
+  console.log(Type.checkConstructor(x1));
+  return console.log(Type.checkConstructor(x2));
 };
 
 runTests();

@@ -226,7 +226,6 @@ export class Type
 
   # this is a key function - used in function pattern matching etc
   @checkConstructor: (v) ->
-    if v == _ then _
     if (v instanceof Value) then v._constructorTag_
     if Type.isTuple v then v[v.length-2]
     else
@@ -235,6 +234,9 @@ export class Type
         when "number" then "Float"
         when "boolean" then "Bool"
         when "function" then "Function" # ok, this is actually not good, since pattern matching won't work with curried functions this way
+        when "object"  # finding the name of the constructor for a standard JS object - useful for defining generic pattern matched functions
+          s = v.constructor.toString()
+          s.substring (s.indexOf ' ') + 1, (s.indexOf '(')
         else throw "We got an unboxed value of type " + (typeof v) + " -- shouldn't happen!"
 
   shortShow: (inside = false)=>
@@ -311,6 +313,9 @@ Type.new "List a", "Cell a List", "Nil"
 
 Type.new "Nat", "Z", "S Nat"
 
+###
+FUNCTION CLASS with pattern matching and partial application  --------------------------------------------------------------
+###
 # our functional function with pattern matching and type checking and polymorphism
 export class Func
   # creating a function with specific types. Last one in the list should be return type!!!
@@ -404,6 +409,34 @@ export class Func
 
 export _ = "__ANY_PATTERN_MATCH__" # exporting _ for empty pattern matches
 
+###
+TYPE CLASSES --------------------------------------------------------------
+
+e.g.: - signature definition
+class Show a where
+  show :: a -> String
+
+adding implementation to the dictionary indexed by 'a':
+instance Show MyType where
+  show (MyTypeCons x) = toString x
+
+then, when show is called on a value of some type we check the type, find
+the corresponding function in the dictionary and call it
+###
+
+export class TypeClass
+  constructor: (@name, varTypes...) ->
+    @functions = {} # functions against which we pattern match
+    @vars = [] # variables that this function accepts
+    @returnType = varTypes.pop()
+    for i in [0...varTypes.length]
+      @vars.push new Var i.toString(), -1, varTypes[i]
+
+
+
+###
+SOME STANDARD FUNCTIONS --------------------------------------------------------------
+###
 # id - checking "default" functionality and polymorphic functions
 # for now, works in terms of default but there's no polymorphic type checks etc
 id = new Func "id"
@@ -500,6 +533,13 @@ runTests = ->
   console.log testF47 2
   #console.log testF7 7
   console.log testF 1, 2, 0
+
+  console.log "Testing constructors"
+  console.log Type.checkConstructor two
+  x1 = new Var
+  x2 = new Type "Hello", "Hello"
+  console.log Type.checkConstructor x1
+  console.log Type.checkConstructor x2
 
 
 
