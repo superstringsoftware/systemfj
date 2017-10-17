@@ -313,8 +313,6 @@ Type.new "Pair a b", "Pair a b"
 Type.new "Either a b", "Left a", "Right b"
 Type.new "Maybe a", "Just a", "Nothing"
 
-Type.new "List a", "Cell a List", "Nil"
-
 Type.new "Nat", "Z", "S Nat"
 
 ###
@@ -331,7 +329,13 @@ export class Func
     for i in [0...varTypes.length]
       @vars.push new Var i.toString(), -1, varTypes[i]
     # adding a default catch all function
-    @functions["__DEFAULT__"] = => throw "Non-exaustive pattern match in definition of " + @show()
+    @functions["__DEFAULT__"] = => 
+      console.dir arguments
+      v = "Arguments:"
+      v += " " + Type.checkConstructor a for a in arguments
+      e = "Expected: "
+      e += " " + k.type.name for k in @vars
+      throw "Non-exaustive pattern match in definition of " + @show() + "\n" + v + "\n" + e
     @fdef = @functions["__DEFAULT__"]
     #console.log "Created function " + @name + " with arguments:"
     #console.log @vars
@@ -403,12 +407,10 @@ export class Func
 
   show: =>
     ret = @name + " :: "
-    if @vars.length < 2
-      throw "Function must have a return type and at least 1 variable!"
-    else
-      for i in [0...@vars.length-1]
-        ret += @vars[i].type.name + " -> "
-      ret += @vars[@vars.length-1].type.name
+  
+    for i in [0...@vars.length-1]
+      ret += @vars[i].type.name + " -> "
+    ret += @vars[@vars.length-1].type.name
     ret += " -> " + @returnType.name
 
 export _ = "__ANY_PATTERN_MATCH__" # exporting _ for empty pattern matches
@@ -438,10 +440,23 @@ export class TypeClass
 
 
 ###
+# ========= LISTS VIA TYPECLASSES =========================================================
+###
+
+# Purely functional list - most likely, terribly slow etc :)
+Type.new "List a", "Cell a List", "Nil"
+
 # Built in List type --------------------------------------------------------------
 # type used to implement List behaviour using immutable JS Arrays as an underlying data representation
-###
 Type.new "JList a", "JList Array"
+
+# function that builds a JList from a JS Array
+# we don't want to expose JList constructor directly
+# this function should be a primary way to construct the JList
+# Eventually, has to handle typechecking and freezing - for now, simply boxes a given array
+fromArray = new Func "fromArray", Type.Array, Type.JList
+  .match "Array", (a) -> JList a
+  .ap
 
 head = new Func "head"
   .match "JList", ([l]) -> l[0]
@@ -563,13 +578,15 @@ runTests = ->
   console.log Type.checkConstructor x2
 
   console.log "Testing built in lists"
-  testL = JList [1,3,4,10,12]
+  testL = fromArray [1,3,4,10,12]
   console.dir testL
   console.log "Head and tail"
   console.log head testL
   console.log tail testL
+  xxxxx = fromArray {head: 2}, new Var
+  console.log xxxxx
 
-  f10 Var
+  #f10 Var
 
 
 
