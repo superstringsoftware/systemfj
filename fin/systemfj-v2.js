@@ -14,11 +14,18 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
     return function () {
       return fn.apply(me, arguments);
     };
+  },
+      indexOf = [].indexOf || function (item) {
+    for (var i = 0, l = this.length; i < l; i++) {
+      if (i in this && this[i] === item) return i;
+    }return -1;
   };
 
   util = require('util');
 
   util.inspect.defaultOptions.colors = true;
+
+  util.inspect.defaultOptions.depth = 3;
 
   Constructor = function () {
     Constructor.MAGIC = -7777.777;
@@ -27,15 +34,17 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
       this.type = type;
       this.index = index;
       this.name = name1;
+      this.updateCurrentBindings = bind(this.updateCurrentBindings, this);
       this["new"] = bind(this["new"], this);
       this.varBindings = [];
       if (varBindings != null) {
         this.varBindings = varBindings;
       }
+      this.currentVarBindings = [];
     }
 
     Constructor.prototype["new"] = function (v) {
-      var i, j, ref, ret, vals;
+      var i, j, ref, ret, vals, vb;
       vals = [];
       if (v instanceof Array) {
         vals = v;
@@ -48,18 +57,41 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
         throw "Expecting " + this.varBindings.length + " arguments and received " + vals.length + " in the call of " + this.name;
       }
       ret = [];
+      this.currentVarBindings = this.varBindings.slice();
       for (i = j = 0, ref = vals.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
-        if (Type.isTypeOk(vals[i], this.varBindings[i])) {
+        vb = this.currentVarBindings[i];
+        if (Type.isTypeOk(vals[i], vb)) {
+          if (typeof vb === "number") {
+            this.updateCurrentBindings(i, Type.getType(vals[i]));
+          }
           Object.freeze(vals[i]);
           ret.push(vals[i]);
         } else {
-          throw "Type mismatch in the " + i + "-th argument in the call to " + this.name + ": expected " + this.varBindings[i].fullName() + " and got " + Type.getTypeName(vals[i]);
+          throw "Type mismatch in the argument #" + (i + 1) + " in the call to " + this.name + ": expected " + vb.fullName() + " and got " + Type.getTypeName(vals[i]);
         }
       }
       ret.push(this.index);
       ret.push(Constructor.MAGIC);
       Object.freeze(ret);
       return ret;
+    };
+
+    Constructor.prototype.updateCurrentBindings = function (k, val) {
+      var i, j, ref, results, t;
+      results = [];
+      for (i = j = 0, ref = this.currentVarBindings.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+        if (this.currentVarBindings[i] === k) {
+          this.currentVarBindings[i] = val;
+        }
+        if (this.type.name === this.currentVarBindings[i].name) {
+          t = this.currentVarBindings[i]._clone();
+          t.varTypes[k] = val;
+          results.push(this.currentVarBindings[i] = t);
+        } else {
+          results.push(void 0);
+        }
+      }
+      return results;
     };
 
     return Constructor;
@@ -71,16 +103,22 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
     Type.allConstructors = [];
 
     Type.isTypeOk = function (val, binding) {
-      var t1;
+      var i, j, ok, ref, ref1, ref2, ret, tt, vt;
       if (typeof binding === "number") {
         return true;
       } else {
-        t1 = Type.getTypeName(val);
-        if (t1 === binding.fullName()) {
-          return true;
-        } else {
-          return false;
+        vt = Type.getTypeName(val).split(' ');
+        tt = binding.fullName().split(' ');
+        ret = true;
+        for (i = j = 0, ref = tt.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
+          if ((ref1 = tt[i], indexOf.call(Type._typeVarNames, ref1) >= 0) || (ref2 = vt[i], indexOf.call(Type._typeVarNames, ref2) >= 0)) {
+            ok = true;
+          } else {
+            ok = vt[i] === tt[i] ? true : false;
+          }
+          ret = ret && ok;
         }
+        return ret;
       }
     };
 
@@ -88,7 +126,7 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
       var i, j, ref, ret;
       ret = this.name;
       for (i = j = 0, ref = this.varTypes.length; 0 <= ref ? j < ref : j > ref; i = 0 <= ref ? ++j : --j) {
-        ret += " " + Type._typeVarNames[i];
+        ret += this.varTypes[i].name === "Type" ? " " + Type._typeVarNames[i] : " " + this.varTypes[i].name;
       }
       return ret;
     };
@@ -97,8 +135,36 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
       return v instanceof Array && v[v.length - 1] === Constructor.MAGIC;
     };
 
+    Type.getType = function (v) {
+      var cons;
+      if (Type.isTuple(v)) {
+        cons = Type.allConstructors[v[v.length - 2]];
+        return cons.type;
+      } else {
+        switch (typeof v === "undefined" ? "undefined" : _typeof(v)) {
+          case "string":
+            return Type.String;
+          case "number":
+            if (Number.isInteger(v)) {
+              return Type.Int;
+            } else {
+              return Type.Float;
+            }
+            break;
+          case "boolean":
+            return Type.Bool;
+          case "function":
+            return Type.Function;
+          case "object":
+            return Type.Object;
+          default:
+            throw "We got an unboxed value of type " + (typeof v === "undefined" ? "undefined" : _typeof(v)) + " while checking type -- shouldn't happen!";
+        }
+      }
+    };
+
     Type.getTypeName = function (v) {
-      var cons, i, j, k, len, ref, ret, s, vararr, x;
+      var cons, i, j, l, len, ref, ret, s, vararr, x;
       if (Type.isTuple(v)) {
         cons = Type.allConstructors[v[v.length - 2]];
         ret = cons.type.name;
@@ -115,8 +181,8 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
             vararr[cons.varBindings[i]] = Type.getTypeName(v[i]);
           }
         }
-        for (k = 0, len = vararr.length; k < len; k++) {
-          x = vararr[k];
+        for (l = 0, len = vararr.length; l < len; l++) {
+          x = vararr[l];
           ret += " " + x;
         }
         return ret;
@@ -144,17 +210,35 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
       }
     };
 
-    function Type(name1, varTypes) {
+    function Type(name1, varTypes, addToTypes) {
       this.name = name1;
+      if (addToTypes == null) {
+        addToTypes = true;
+      }
       this.cons = bind(this.cons, this);
+      this.instantiate = bind(this.instantiate, this);
+      this._clone = bind(this._clone, this);
       this.fullName = bind(this.fullName, this);
       this.constructors = {};
       this.varTypes = [];
       if (varTypes != null) {
         this.varTypes = varTypes;
       }
-      Type[this.name] = this;
+      if (addToTypes) {
+        Type[this.name] = this;
+      }
     }
+
+    Type.prototype._clone = function () {
+      return new Type(this.name, this.varTypes.slice(), false);
+    };
+
+    Type.prototype.instantiate = function (vals) {
+      if (vals.length !== this.varTypes.length) {
+        throw "Have to instantiate a type with full signature now!";
+      }
+      return new Type(this.name, vals, false);
+    };
 
     Type["new"] = function (name, varTypes) {
       var i, j, ref, vt;
@@ -213,6 +297,14 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
 
   Type["new"]("Int");
 
+  Type["new"]("Float");
+
+  Type["new"]("String");
+
+  Type["new"]("Function");
+
+  Type["new"]("Object");
+
   T = Type;
 
   runTests = function runTests() {
@@ -233,7 +325,22 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
     console.log(_show(Crazy["new"]([4, "hello"])));
     l1 = Cell["new"]([5, Nil["new"]()]);
     console.log(_show(l1));
-    return l2 = Cell["new"]([18.7, l1]);
+    console.log("Now attaching Float to List Int - MUST FAIL!!!");
+    console.log("==============================================");
+    l2 = Cell["new"]([18.7, l1]);
+    return console.log(_show(l2));
+
+    /*
+    #l3 = Cell.new [15, 29] # has to fail 
+    
+    
+     * for testing incremental construction
+    Type.new "T1", 1
+      .cons "T1C", [0, 0]
+    
+    t = T1C.new ["4", "7"]
+    console.log show t
+     */
   };
 
   runTests();
