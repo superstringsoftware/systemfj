@@ -1,7 +1,7 @@
 chai = require 'chai'
 chai.should()
 
-root = require '../src/systemfj-v2'
+root = require '../src/systemfj'
 # exporting everything from systemfj into global namespace
 global[k] = root[k] for k of root
   

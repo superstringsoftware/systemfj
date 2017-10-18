@@ -22,7 +22,7 @@ babel = (callback) ->
     callback?() if code is 0
 
 run = (callback) ->
-  coffee = spawn 'node', ['fin/main.js']
+  coffee = spawn 'node', ['lib/main.js']
   coffee.stderr.on 'data', (data) ->
     process.stderr.write data.toString()
   coffee.stdout.on 'data', (data) ->
@@ -31,10 +31,10 @@ run = (callback) ->
     callback?() if code is 0
 
 task 'build', 'Build lib/ from src/', ->
-  build babel
+  build()
 
 task 'run', 'Run main.js', ->
   run()
 
 task 'exec', 'Build everything and run main.js', ->
-  build babel run
+  build run

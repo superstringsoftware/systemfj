@@ -1,5 +1,6 @@
-import * as SFJ from './systemfj-v2'
-#import {S, Z} from './base'
+root = require './systemfj'
+# exporting everything from systemfj into global namespace
+global[k] = root[k] for k of root
 
 # Some tests #################################################
 
