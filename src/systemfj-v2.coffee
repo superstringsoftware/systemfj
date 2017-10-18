@@ -2,6 +2,9 @@ util = require('util')
 util.inspect.defaultOptions.colors = true
 util.inspect.defaultOptions.depth = 3
 
+# setting up old-type exports for Node
+root = exports ? window
+
 #colors = require('colors/safe')
 
 #console.dir colors
@@ -255,6 +258,7 @@ class Type
     Type.allConstructors.push c # adding this constructor to array of all constructors
     @constructors[name] = c # adding this constructor to the dictionary of this type constructors
     global[name] = c.new # putting constructor into global scope
+    root[name] = c.new # exporting Constructor functions
     @ # for chaining calls
 
 
@@ -310,7 +314,7 @@ Type.new "Concrete"
 FUNCTION CLASS with pattern matching and partial application  --------------------------------------------------------------
 ###
 # our functional function with pattern matching and type checking and polymorphism
-export class Func
+class Func
   # creating a function with specific types. Last one in the list should be return type!!!
   constructor: (@name, varTypes...) ->
     @functions = {} # functions against which we pattern match
@@ -329,6 +333,7 @@ export class Func
     @fdef = @functions["__DEFAULT__"]
     #console.log "Created function " + @name + " with arguments:"
     #console.log @vars
+    root[@name] = @ap # Exporting to global scope!
 
   # internal function needed for creating new function based on this
   # when doing partial application without screwing original function signature
@@ -403,7 +408,7 @@ export class Func
     ret += @vars[@vars.length-1].type.name
     ret += " -> " + @returnType.name
 
-export _ = "__ANY_PATTERN_MATCH__" # exporting _ for empty pattern matches
+_ = "__ANY_PATTERN_MATCH__" # exporting _ for empty pattern matches
 
 ###
 SOME STANDARD FUNCTIONS --------------------------------------------------------------
@@ -462,57 +467,21 @@ tail = new Func "tail", Type.JList, Type.JList
 # tests
 runTests = ->
 
-  #console.dir Type 
-
-  
-  console.log show Just 17
-  console.log show Just "hello"
-  console.log show Nothing()
-  console.log show Concrete 41
-  console.log show Pair ["Hello", 249]
-  #console.log show Concrete.new 41.2
-  console.log show Right "hello"
-  console.log show Left 3.1415
-
-  console.log show Crazy [4, "hello"]
-  
-  #console.dir Type.List, depth: 3
-  l1 = Cell [5, Nil()]
-  #console.dir list
-  console.log show l1
-
-  l2 = Cell [18, l1] 
-  console.log show l2
-  ###
-  #l3 = Cell.new [15, 29] # has to fail 
-  
-
-  # for testing incremental construction
-  Type.new "T1", 1
-    .cons "T1C", [0, 0]
-
-  t = T1C.new ["4", "7"]
-  console.log show t
-  ###
-
-  console.log "             TESTING FUNCTIONS                "
-  console.log "=============================================="
-
-  console.log show id Just 13
-  console.log "Length of list " + (show l2) + " is " + (length l2)
-  console.log "Mapping * 2 over this same list: "
-  l3 = map ((x)->x*2), l2
-  console.log show l3
-
   jl = fromArray [[1,2,3,4,5]]
   console.log show jl
 
 
-runTests()
+#runTests()
 
 
 
+# additional exports
+root.Type = Type
+root.Func = Func
+root.show = show
+root.Constructor = Constructor
 
+#console.log root
 
 
 
