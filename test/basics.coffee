@@ -2,12 +2,10 @@ chai = require 'chai'
 chai.should()
 
 root = require '../src/systemfj-v2'
-show = root.show
-Constructor = root.Constructor
-Type = root.Type
-length = root.length
-map = root.map
-#console.dir root
+# exporting everything from systemfj into global namespace
+global[k] = root[k] for k of root
+  
+
 
 describe 'Creating some basic values', ->
   x1 = Just 17
