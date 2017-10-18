@@ -10,11 +10,14 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
 var Constructor,
     T,
     Type,
+    fromArray,
+    head,
     id,
     length,
     map,
     runTests,
     _show,
+    tail,
     util,
     bind = function bind(fn, me) {
   return function () {
@@ -171,7 +174,7 @@ Type = function () {
   };
 
   Type.getTypeName = function (v) {
-    var cons, i, j, l, len, ref, ret, s, vararr, x;
+    var cons, i, j, len, m, ref, ret, s, vararr, x;
     if (Type.isTuple(v)) {
       cons = Type.allConstructors[v[v.length - 2]];
       ret = cons.type.name;
@@ -188,8 +191,8 @@ Type = function () {
           vararr[cons.varBindings[i]] = Type.getTypeName(v[i]);
         }
       }
-      for (l = 0, len = vararr.length; l < len; l++) {
-        x = vararr[l];
+      for (m = 0, len = vararr.length; m < len; m++) {
+        x = vararr[m];
         ret += " " + x;
       }
       return ret;
@@ -295,7 +298,7 @@ Type = function () {
     c = new Constructor(this, Type.allConstructors.length, name, bindings);
     Type.allConstructors.push(c);
     this.constructors[name] = c;
-    global[name] = c;
+    global[name] = c["new"];
     return this;
   };
 
@@ -313,7 +316,16 @@ _show = function show(v, top_level) {
     if (Type.isTuple(v[i])) {
       ret += " " + _show(v[i], false);
     } else {
-      ret += typeof v[i] === "string" ? " '" + v[i] + "'" : " " + v[i];
+      switch (Type.checkConstructor(v[i])) {
+        case "String":
+          ret += " '" + v[i] + "'";
+          break;
+        case "Array":
+          ret += " [" + v[i] + "]";
+          break;
+        default:
+          ret += " " + v[i];
+      }
     }
   }
   ret = v.length > 2 && !top_level ? ret + ")" : ret;
@@ -335,6 +347,8 @@ Type["new"]("Function");
 
 Type["new"]("Object");
 
+Type["new"]("Array");
+
 T = Type;
 
 Type["new"]("Maybe", 1).cons("Just", [0]).cons("Nothing");
@@ -346,8 +360,6 @@ Type["new"]("Either", 2).cons("Left", [0]).cons("Right", [1]);
 Type["new"]("Strange", 1).cons("Crazy", [T.Int, 0]);
 
 Type["new"]("Concrete").cons("Concrete", [T.Int]);
-
-Type["new"]("List", 1).cons("Cell", [0, Type.List]).cons("Nil");
 
 /*
 FUNCTION CLASS with pattern matching and partial application  --------------------------------------------------------------
@@ -374,7 +386,7 @@ var Func = exports.Func = function () {
     }
     this.functions["__DEFAULT__"] = function (_this) {
       return function () {
-        var a, e, j, k, l, len, len1, ref, v;
+        var a, e, j, k, len, len1, m, ref, v;
         console.dir(arguments);
         v = "Arguments:";
         for (j = 0, len = arguments.length; j < len; j++) {
@@ -383,8 +395,8 @@ var Func = exports.Func = function () {
         }
         e = "Expected: ";
         ref = _this.vars;
-        for (l = 0, len1 = ref.length; l < len1; l++) {
-          k = ref[l];
+        for (m = 0, len1 = ref.length; m < len1; m++) {
+          k = ref[m];
           e += " " + k.type.name;
         }
         throw "Non-exaustive pattern match in definition of " + _this.show() + "\n" + v + "\n" + e;
@@ -451,7 +463,7 @@ var Func = exports.Func = function () {
   };
 
   Func.prototype.ap = function () {
-    var allVals, f, j, l, len, len1, pat, v, vals;
+    var allVals, f, j, len, len1, m, pat, v, vals;
     vals = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     if (vals.length < this.vars.length) {
       f = this._clone();
@@ -464,8 +476,8 @@ var Func = exports.Func = function () {
     } else {
       allVals = this.vals.concat(vals);
       pat = "";
-      for (l = 0, len1 = allVals.length; l < len1; l++) {
-        v = allVals[l];
+      for (m = 0, len1 = allVals.length; m < len1; m++) {
+        v = allVals[m];
         pat += Type.checkConstructor(v);
       }
       f = this.functions[pat];
@@ -500,6 +512,12 @@ id = new Func("id").match(function (x) {
   return x;
 }).ap;
 
+/*
+ * ========= LISTS VIA TYPECLASSES =========================================================
+ */
+
+Type["new"]("List", 1).cons("Cell", [0, Type.List]).cons("Nil");
+
 length = new Func("length", Type.List, Type.Int).match("Nil", function () {
   return 0;
 }).match("Cell", function (arg) {
@@ -509,26 +527,44 @@ length = new Func("length", Type.List, Type.Int).match("Nil", function () {
 }).ap;
 
 map = new Func("map", Type.Function, Type.List, Type.List).match(["Function", "Nil"], function () {
-  return Nil["new"]();
+  return Nil();
 }).match(["Function", "Cell"], function (f, arg) {
   var tail, x;
   x = arg[0], tail = arg[1];
-  return Cell["new"]([f(x), map(f, tail)]);
+  return Cell([f(x), map(f, tail)]);
+}).ap;
+
+Type["new"]("JList", 1).cons("JList", [Type.Array]);
+
+fromArray = new Func("fromArray", Type.Array, Type.JList).match("Array", function (a) {
+  return JList(a);
+}).ap;
+
+head = new Func("head").match("JList", function (arg) {
+  var l;
+  l = arg[0];
+  return l[0];
+}).ap;
+
+tail = new Func("tail", Type.JList, Type.JList).match("JList", function (arg) {
+  var l;
+  l = arg[0];
+  return JList(l.slice(1));
 }).ap;
 
 runTests = function runTests() {
-  var l1, l2, l3;
-  console.log(_show(Just["new"](17)));
-  console.log(_show(Just["new"]("hello")));
-  console.log(_show(Nothing["new"]()));
-  console.log(_show(Concrete["new"](41)));
-  console.log(_show(Pair["new"](["Hello", 249])));
-  console.log(_show(Right["new"]("hello")));
-  console.log(_show(Left["new"](3.1415)));
-  console.log(_show(Crazy["new"]([4, "hello"])));
-  l1 = Cell["new"]([5, Nil["new"]()]);
+  var jl, l1, l2, l3;
+  console.log(_show(Just(17)));
+  console.log(_show(Just("hello")));
+  console.log(_show(Nothing()));
+  console.log(_show(Concrete(41)));
+  console.log(_show(Pair(["Hello", 249])));
+  console.log(_show(Right("hello")));
+  console.log(_show(Left(3.1415)));
+  console.log(_show(Crazy([4, "hello"])));
+  l1 = Cell([5, Nil()]);
   console.log(_show(l1));
-  l2 = Cell["new"]([18, l1]);
+  l2 = Cell([18, l1]);
   console.log(_show(l2));
 
   /*
@@ -544,13 +580,15 @@ runTests = function runTests() {
    */
   console.log("             TESTING FUNCTIONS                ");
   console.log("==============================================");
-  console.log(_show(id(Just["new"](13))));
+  console.log(_show(id(Just(13))));
   console.log("Length of list " + _show(l2) + " is " + length(l2));
   console.log("Mapping * 2 over this same list: ");
   l3 = map(function (x) {
     return x * 2;
   }, l2);
-  return console.log(_show(l3));
+  console.log(_show(l3));
+  jl = fromArray([[1, 2, 3, 4, 5]]);
+  return console.log(_show(jl));
 };
 
 runTests();

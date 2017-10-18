@@ -148,11 +148,15 @@ class Type
       for i in [0...tt.length]
         # if we expect a type var - it's ok, BUT need to CHECK CONSTRAINS WHEN THEY ARE IMPLEMENTED!!!
         # OR if value type is polymorphic (e.g., Nil :: List a - can attach to any other list)
-        if tt[i] in Type._typeVarNames or vt[i] in Type._typeVarNames 
+        # OR we are building something recursively with a function - eventually, will need to typecheck function return type, for now just ignoring
+        if (tt[i] in Type._typeVarNames) or (vt[i] in Type._typeVarNames) #or (vt[i] is 'Function') or vt[i] is undefined # this last one is needed for Function case handling, but NEEDS FIXING!!!
+          #console.log i, " ", vt[i], "ret is " + ret
           ok = true
         else 
+          #console.log i, " ", vt[i], "ret is " + ret
           ok = if vt[i] is tt[i] then true else false
         ret = ret and ok
+      #console.log "Typechecks: " + ret
       ret 
 
   # returning fully qualified type name based on current var bindings
@@ -250,7 +254,7 @@ class Type
     c = new Constructor @, Type.allConstructors.length, name, bindings
     Type.allConstructors.push c # adding this constructor to array of all constructors
     @constructors[name] = c # adding this constructor to the dictionary of this type constructors
-    global[name] = c # putting constructor into global scope
+    global[name] = c.new # putting constructor into global scope
     @ # for chaining calls
 
 
@@ -264,7 +268,11 @@ show = (v, top_level = true)->
     if Type.isTuple v[i] 
       ret += " " + show v[i], false
     else 
-      ret += if typeof v[i] is "string" then " '" + v[i] + "'" else " " + v[i] 
+      switch (Type.checkConstructor v[i])
+        when "String" then ret += " '" + v[i] + "'"
+        when "Array" then ret += " [" + v[i] + "]"
+        else ret += " " + v[i]
+      
   ret = if (v.length > 2) and (not top_level) then ret + ")" else ret
   ret += " :: " + Type.getTypeName v if top_level
   ret
@@ -276,6 +284,7 @@ Type.new "Float"
 Type.new "String"
 Type.new "Function"
 Type.new "Object"
+Type.new "Array"
 T = Type
 
 
@@ -295,11 +304,6 @@ Type.new "Strange", 1
 
 Type.new "Concrete"
   .cons "Concrete", [T.Int]
-
-Type.new "List", 1
-  .cons "Cell", [0, Type.List]
-  .cons "Nil"
-
 
 
 ###
@@ -410,6 +414,16 @@ id = new Func "id"
   .match (x)->x
   .ap
 
+
+###
+# ========= LISTS VIA TYPECLASSES =========================================================
+###
+
+# purely functional list type - slow, inefficient etc
+Type.new "List", 1
+  .cons "Cell", [0, Type.List]
+  .cons "Nil"
+
 # List - basic recursive type, very much needed for some advanced experiments - mapping functions, recursion etc
 length = new Func "length", Type.List, Type.Int
   .match "Nil", -> 0
@@ -418,8 +432,30 @@ length = new Func "length", Type.List, Type.Int
 
 # ok, map is more complicated right away because it takes 2 parameters
 map = new Func "map", Type.Function, Type.List, Type.List
-  .match ["Function", "Nil"], -> Nil.new()
-  .match ["Function", "Cell"], (f, [x, tail]) -> Cell.new [(f x), (map f, tail)]
+  .match ["Function", "Nil"], -> Nil()
+  .match ["Function", "Cell"], (f, [x, tail]) -> Cell [(f x), (map f, tail)]
+  .ap
+
+
+# Built in List type --------------------------------------------------------------
+# type used to implement List behaviour using immutable JS Arrays as an underlying data representation
+Type.new "JList", 1 
+  .cons "JList", [Type.Array]
+
+# function that builds a JList from a JS Array
+# we don't want to expose JList constructor directly
+# this function should be a primary way to construct the JList
+# Eventually, has to handle typechecking and freezing - for now, simply boxes a given array
+fromArray = new Func "fromArray", Type.Array, Type.JList
+  .match "Array", (a) -> JList a
+  .ap
+
+head = new Func "head"
+  .match "JList", ([l]) -> l[0]
+  .ap
+
+tail = new Func "tail", Type.JList, Type.JList
+  .match "JList", ([l]) -> JList l.slice 1
   .ap
 
 
@@ -429,23 +465,23 @@ runTests = ->
   #console.dir Type 
 
   
-  console.log show Just.new 17
-  console.log show Just.new "hello"
-  console.log show Nothing.new()
-  console.log show Concrete.new 41
-  console.log show Pair.new ["Hello", 249]
+  console.log show Just 17
+  console.log show Just "hello"
+  console.log show Nothing()
+  console.log show Concrete 41
+  console.log show Pair ["Hello", 249]
   #console.log show Concrete.new 41.2
-  console.log show Right.new "hello"
-  console.log show Left.new 3.1415
+  console.log show Right "hello"
+  console.log show Left 3.1415
 
-  console.log show Crazy.new [4, "hello"]
+  console.log show Crazy [4, "hello"]
   
   #console.dir Type.List, depth: 3
-  l1 = Cell.new [5, Nil.new()]
+  l1 = Cell [5, Nil()]
   #console.dir list
   console.log show l1
 
-  l2 = Cell.new [18, l1] 
+  l2 = Cell [18, l1] 
   console.log show l2
   ###
   #l3 = Cell.new [15, 29] # has to fail 
@@ -462,11 +498,14 @@ runTests = ->
   console.log "             TESTING FUNCTIONS                "
   console.log "=============================================="
 
-  console.log show id Just.new 13
+  console.log show id Just 13
   console.log "Length of list " + (show l2) + " is " + (length l2)
   console.log "Mapping * 2 over this same list: "
   l3 = map ((x)->x*2), l2
   console.log show l3
+
+  jl = fromArray [[1,2,3,4,5]]
+  console.log show jl
 
 
 runTests()
